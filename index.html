@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProjectTask - Gestionnaire & Calendrier (Autonome)</title>
+  <style>
+    :root {
+      --bg-dark: #020617;
+      --bg-panel: #0f172a;
+      --bg-card: #1e293b;
+      --bg-input: #090d16;
+      --border: #1e293b;
+      --border-light: #334155;
+      --primary: #4f46e5;
+      --primary-hover: #6366f1;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    body { background-color: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+    /* Boutons & Inputs */
+    button { cursor: pointer; border: none; background: none; color: inherit; font-size: inherit; transition: 0.15s; }
+    input, select, textarea { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+
+    input[type="date"] { color-scheme: dark; cursor: pointer; }
+    input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; filter: invert(0.8); }
+
+    .btn-primary { background: var(--primary); color: white; font-weight: 500; padding: 8px 16px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: var(--bg-card); border: 1px solid var(--border-light); color: var(--text-main); padding: 7px 12px; border-radius: 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-secondary:hover { background: #293548; }
+
+    /* BARRE LATÉRALE GAUCHE */
+    .sidebar-left { width: 275px; background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; }
+    .sidebar-top { padding: 20px; overflow-y: auto; flex: 1; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .brand-logo { width: 36px; height: 36px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
+    .brand-title { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); font-weight: 600; margin: 20px 0 10px; display: flex; justify-content: space-between; }
+
+    /* Arborescence Projets */
+    .proj-group { margin-bottom: 6px; }
+    .proj-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 10px; color: var(--text-muted); cursor: pointer; }
+    .proj-item:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+    .proj-item.active { background: rgba(79, 70, 229, 0.15); color: #818cf8; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 600; }
+    .proj-left { display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1; }
+    .proj-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+    .badge-count { font-size: 11px; background: var(--bg-card); padding: 2px 7px; border-radius: 12px; color: var(--text-muted); font-family: monospace; }
+    .btn-add-sub { opacity: 0; color: var(--text-muted); padding: 2px 6px; font-weight: bold; }
+    .proj-item:hover .btn-add-sub { opacity: 1; }
+    .btn-add-sub:hover { color: #818cf8; }
+
+    .icon-clickable { display: inline-flex; align-items: center; justify-content: center; padding: 2px 4px; border-radius: 6px; transition: 0.15s; flex-shrink: 0; }
+    .icon-clickable:hover { background: rgba(255, 255, 255, 0.12); transform: scale(1.12); }
+
+    .sub-nav { padding-left: 20px; border-left: 1px solid var(--border); margin: 4px 0 4px 14px; display: flex; flex-direction: column; gap: 3px; }
+    .cat-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
+    .cat-item:hover { background: rgba(255,255,255,0.04); color: var(--text-main); }
+    .cat-item.active { background: rgba(79, 70, 229, 0.25); color: #a5b4fc; font-weight: 600; }
+
+    .sidebar-footer { padding: 20px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.2); }
+    .progress-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+    .progress-bar-bg { width: 100%; height: 6px; background: var(--bg-card); border-radius: 4px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+
+    /* ZONE CENTRALE */
+    .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+    .main-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 16px; background: rgba(15, 23, 42, 0.4); flex-wrap: wrap; }
+    .header-title-row { display: flex; align-items: center; gap: 10px; }
+    .header-title { font-size: 19px; font-weight: 700; }
+    .header-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    /* Switch Vue Liste / Vue Calendrier */
+    .view-switcher { display: flex; background: var(--bg-input); padding: 4px; border-radius: 10px; border: 1px solid var(--border-light); }
+    .view-btn { padding: 6px 14px; border-radius: 7px; font-size: 12px; font-weight: 500; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+    .view-btn:hover { color: white; }
+    .view-btn.active { background: var(--primary); color: white; }
+
+    .workspace { padding: 24px; overflow-y: auto; flex: 1; }
+
+    /* Formulaire ajout rapide */
+    .quick-add-box { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 24px; }
+    .quick-row-top { display: flex; gap: 10px; margin-bottom: 10px; }
+    .quick-row-top input { flex: 1; padding: 10px 14px; }
+    .quick-row-opts { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--text-muted); }
+    .opt-group { display: flex; align-items: center; gap: 6px; }
+    .opt-group select, .opt-group input { padding: 5px 8px; font-size: 12px; }
+
+    /* Barre filtres */
+    .filters-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .filter-tabs { display: flex; background: var(--bg-panel); padding: 4px; border-radius: 10px; border: 1px solid var(--border); gap: 4px; }
+    .filter-btn { padding: 5px 12px; border-radius: 7px; font-size: 12px; color: var(--text-muted); }
+    .filter-btn:hover { color: white; }
+    .filter-btn.active { background: var(--primary); color: white; font-weight: 500; }
+
+    /* Blocs Sous-catégories */
+    .category-card { background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 20px; }
+    .category-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px; }
+    .cat-title-wrap { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+    .task-list { display: flex; flex-direction: column; gap: 8px; }
+
+    /* Ligne de tâche */
+    .task-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+    .task-row:hover { border-color: var(--border-light); }
+    .task-row.selected { border-color: var(--primary); background: rgba(79, 70, 229, 0.08); }
+    .task-row.done { opacity: 0.55; }
+    .task-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+    .checkbox { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--border-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; color: white; }
+    .checkbox.checked { background: var(--primary); border-color: var(--primary); }
+    .task-title { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-row.done .task-title { text-decoration: line-through; color: var(--text-dim); }
+    .task-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 11px; }
+
+    .date-pill { background: rgba(255,255,255,0.04); border: 1px solid var(--border-light); padding: 2px 8px; border-radius: 6px; color: var(--text-muted); font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
+
+    /* Badges priorité */
+    .prio { padding: 2px 8px; border-radius: 12px; font-weight: 600; text-transform: uppercase; font-size: 10px; }
+    .prio-high { color: #f87171; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .prio-medium { color: #fbbf24; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .prio-low { color: #34d399; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
+
+    /* --- VUE CALENDRIER --- */
+    .calendar-wrapper { display: none; flex-direction: column; height: 100%; }
+    .calendar-wrapper.active { display: flex; }
+    .cal-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; background: var(--bg-panel); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); }
+    .cal-month-title { font-size: 16px; font-weight: 700; text-transform: capitalize; }
+    .cal-nav-btns { display: flex; gap: 8px; }
+    .cal-grid-header { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; padding-bottom: 8px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); flex: 1; border-top: 1px solid var(--border); border-left: 1px solid var(--border); background: var(--bg-panel); border-radius: 12px; overflow: hidden; min-height: 520px; }
+    .cal-cell { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px; min-height: 95px; display: flex; flex-direction: column; gap: 4px; background: var(--bg-dark); }
+    .cal-cell.other-month { opacity: 0.35; background: #01040f; }
+    .cal-cell.today { background: rgba(79, 70, 229, 0.06); }
+    .cal-day-num { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 2px; display: flex; justify-content: space-between; }
+    .cal-cell.today .cal-day-num span:first-child { background: var(--primary); color: white; padding: 1px 6px; border-radius: 10px; }
+    
+    .cal-event { font-size: 11px; padding: 3px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; font-weight: 500; border-left: 3px solid; }
+    .cal-event:hover { filter: brightness(1.2); }
+    .cal-event.done { text-decoration: line-through; opacity: 0.5; }
+    .cal-ev-high { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border-left-color: #ef4444; }
+    .cal-ev-medium { background: rgba(245, 158, 11, 0.18); color: #fde68a; border-left-color: #f59e0b; }
+    .cal-ev-low { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border-left-color: #10b981; }
+
+    /* VOLET LATÉRAL DROIT (DÉTAILS) */
+    .drawer-right { width: 360px; background: var(--bg-panel); border-left: 1px solid var(--border); display: none; flex-direction: column; justify-content: space-between; flex-shrink: 0; }
+    .drawer-right.open { display: flex; }
+    .drawer-body { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+    .drawer-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+    .drawer-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #818cf8; letter-spacing: 0.5px; }
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-label { font-size: 12px; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .end-date-box { background: rgba(79, 70, 229, 0.1); border: 1px solid rgba(79, 70, 229, 0.25); padding: 8px 12px; border-radius: 8px; font-size: 12px; color: #a5b4fc; display: flex; justify-content: space-between; }
+    .drawer-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); }
+    .btn-delete-task { color: #f87171; font-size: 12px; padding: 6px 10px; border-radius: 6px; }
+    .btn-delete-task:hover { background: rgba(239, 68, 68, 0.15); }
+    .save-badge { color: #34d399; font-size: 11px; opacity: 0; transition: opacity 0.3s; }
+    .save-badge.visible { opacity: 1; }
+
+    /* MODALS & SÉLECTEUR D'ICÔNES */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: var(--bg-panel); border: 1px solid var(--border-light); border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+    .icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-top: 8px; max-height: 170px; overflow-y: auto; padding: 6px; background: var(--bg-input); border-radius: 10px; border: 1px solid var(--border); }
+    .icon-option { font-size: 18px; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; }
+    .icon-option:hover { background: var(--bg-card); }
+    .icon-option.selected { background: rgba(79, 70, 229, 0.3); border-color: var(--primary); }
+    .custom-icon-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <!-- BARRE LATÉRALE GAUCHE -->
+  <aside class="sidebar-left">
+    <div class="sidebar-top">
+      <div class="brand">
+        <div class="brand-logo">✓</div>
+        <div class="brand-title">ProjectTask</div>
+      </div>
+
+      <button id="btnNewProject" class="btn-primary" style="width: 100%;">+ Nouveau projet</button>
+
+      <div class="section-label">
+        <span>Arborescence</span>
+        <span style="font-size: 10px; font-weight: normal;">Clic icône / 2-clic nom</span>
+      </div>
+
+      <nav id="projectsList"></nav>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="progress-header">
+        <span>Progression globale</span>
+        <span id="globalProgressPercentage">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div id="globalProgressBar" class="progress-bar-fill"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CONTENU PRINCIPAL -->
+  <main class="main-content">
+    <header class="main-header">
+      <div>
+        <div class="header-title-row">
+          <h2 id="currentProjectTitle" class="header-title">Sélectionnez un projet</h2>
+          <button id="btnDeleteProject" style="color: var(--text-dim);" title="Supprimer le projet">🗑️</button>
+        </div>
+        <p id="currentProjectDesc" class="header-desc">Sauvegarde automatique locale • Export JSON disponible.</p>
+      </div>
+
+      <div class="header-actions">
+        <div class="view-switcher">
+          <button id="btnViewList" class="view-btn active">📋 Liste</button>
+          <button id="btnViewCalendar" class="view-btn">📅 Calendrier</button>
+        </div>
+
+        <button id="btnNewCategory" class="btn-secondary">📁+ Sous-catégorie</button>
+        <button id="btnExportData" class="btn-secondary" title="Télécharger une sauvegarde JSON">💾 Exporter</button>
+        <button id="btnImportData" class="btn-secondary" title="Restaurer depuis un fichier JSON">📂 Importer</button>
+        <input type="file" id="fileImportInput" accept=".json" style="display: none;">
+      </div>
+    </header>
+
+    <div class="workspace">
+      
+      <!-- VUE 1 : LISTE DES TÂCHES -->
+      <div id="listViewContainer">
+        <div class="quick-add-box">
+          <form id="quickTaskForm">
+            <div class="quick-row-top">
+              <input type="text" id="quickTaskTitle" placeholder="Ajouter une tâche rapidement (appuyez sur Entrée)...">
+              <button type="submit" class="btn-primary">+ Ajouter</button>
+            </div>
+            <div class="quick-row-opts">
+              <div class="opt-group">
+                <span>Catégorie :</span>
+                <select id="quickTaskCategory"></select>
+              </div>
+              <div class="opt-group">
+                <span>Priorité :</span>
+                <select id="quickTaskPriority">
+                  <option value="low">Basse</option>
+                  <option value="medium" selected>Moyenne</option>
+                  <option value="high">Haute</option>
+                </select>
+              </div>
+              <div class="opt-group">
+                <span>Début :</span>
+                <input type="date" id="quickTaskStartDate" class="auto-picker">
+              </div>
+              <div class="opt-group">
+                <span>Durée (jours) :</span>
+                <input type="number" id="quickTaskDuration" min="1" max="365" value="1" style="width: 65px;">
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="filters-bar">
+          <div class="filter-tabs">
+            <button data-filter="all" class="filter-btn active">Toutes</button>
+            <button data-filter="todo" class="filter-btn">À faire</button>
+            <button data-filter="done" class="filter-btn">Terminées</button>
+          </div>
+          <div id="projectStats" style="font-size: 12px; color: var(--text-muted);">0 tâche(s)</div>
+        </div>
+
+        <div id="categoriesContainer"></div>
+      </div>
+
+      <!-- VUE 2 : CALENDRIER / PLANNING -->
+      <div id="calendarViewContainer" class="calendar-wrapper">
+        <div class="cal-controls">
+          <div class="cal-nav-btns">
+            <button id="btnPrevMonth" class="btn-secondary">◀ Mois préc.</button>
+            <button id="btnTodayMonth" class="btn-secondary">Aujourd'hui</button>
+            <button id="btnNextMonth" class="btn-secondary">Mois suiv. ▶</button>
+          </div>
+          <div id="calMonthLabel" class="cal-month-title">Novembre 2026</div>
+          <div style="font-size: 12px; color: var(--text-muted);">Affiche les tâches planifiées du projet actif</div>
+        </div>
+
+        <div class="cal-grid-header">
+          <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+        </div>
+        <div id="calendarGrid" class="cal-grid"></div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- VOLET LATÉRAL DROIT (DÉTAILS DE TÂCHE) -->
+  <aside id="taskDetailDrawer" class="drawer-right">
+    <div class="drawer-body">
+      <div class="drawer-header">
+        <span class="drawer-tag">⚙️ Détails de la tâche</span>
+        <button id="btnCloseDrawer" style="color: var(--text-muted); font-size: 16px;">✕</button>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Intitulé</label>
+        <div style="display: flex; gap: 10px; align-items: flex-start;">
+          <button id="drawerToggleDone" class="checkbox" style="margin-top: 8px;"></button>
+          <textarea id="drawerTaskTitle" rows="2" style="flex: 1; resize: none; font-weight: 600;"></textarea>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Sous-catégorie</label>
+        <select id="drawerTaskCategory"></select>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Priorité</label>
+        <select id="drawerTaskPriority">
+          <option value="low">Basse</option>
+          <option value="medium">Moyenne</option>
+          <option value="high">Haute</option>
+        </select>
+      </div>
+
+      <div class="drawer-grid">
+        <div class="field-group">
+          <label class="field-label">Date de début</label>
+          <input type="date" id="drawerTaskStartDate" class="auto-picker">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Durée (jours)</label>
+          <input type="number" id="drawerTaskDuration" min="1" max="365" value="1">
+        </div>
+      </div>
+
+      <div id="drawerEndDatePreview" class="end-date-box">
+        <span>Fin estimée :</span>
+        <strong id="drawerEndDateValue">—</strong>
+      </div>
+
+      <div class="field-group" style="flex: 1;">
+        <label class="field-label">
+          <span>📝 Notes & Description</span>
+          <span id="drawerSaveIndicator" class="save-badge">Enregistré ✓</span>
+        </label>
+        <textarea id="drawerTaskNotes" style="flex: 1; min-height: 150px; resize: vertical; line-height: 1.5;" placeholder="Ajoutez vos notes, remarques ou liens ici..."></textarea>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <span style="font-size: 11px; color: var(--text-dim);">Sauvegarde locale auto</span>
+      <button id="drawerDeleteTask" class="btn-delete-task">🗑️ Supprimer</button>
+    </div>
+  </aside>
+
+  <!-- MODAL NOUVEAU PROJET -->
+  <div id="modalProject" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">Nouveau Projet</div>
+      <div class="field-group">
+        <label class="field-label">Nom du projet</label>
+        <input type="text" id="inputProjectName" placeholder="Ex: PONT_3, STATION_A..." style="width: 100%;">
+      </div>
+      <div class="field-group" style="margin-top: 14px;">
+        <label class="field-label">Choisir une icône</label>
+        <div id="projectIconGrid" class="icon-grid"></div>
+        <div class="custom-icon-row">
+          <span>Ou icône libre :</span>
+          <input type="text" id="inputProjectCustomIcon" maxlength="4" style="width: 60px; text-align: center; font-size: 16px;" value="📁">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="btnCloseProjectModal" class="btn-secondary">Annuler</button>
+        <button id="btnSaveProject" class="btn-primary">Créer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL NOUVELLE SOUS-CATÉGORIE -->
+  <div id="modalCategory" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-title">Nouvelle Sous-catégorie</div>
+      <div class="field-group">
+        <label class="field-label">Nom de la sous-catégorie</label>
+        <input type="text" id="inputCategoryName" placeholder="Ex: GENERAL, LiDAR, BARRIERE..." style="width: 100%;">
+      </div>
+      <div class="field-group" style="margin-top: 14px;">
+        <label class="field-label">Choisir une icône</label>
+        <div id="categoryIconGrid" class="icon-grid"></div>
+        <div class="custom-icon-row">
+          <span>Ou icône libre :</span>
+          <input type="text" id="inputCategoryCustomIcon" maxlength="4" style="width: 60px; text-align: center; font-size: 16px;" value="▤">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="btnCloseCategoryModal" class="btn-secondary">Annuler</button>
+        <button id="btnSaveCategory" class="btn-primary">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MODIFICATION D'ICÔNE EXISTANTE -->
+  <div id="modalChangeIcon" class="modal-overlay">
+    <div class="modal-box">
+      <div id="changeIconModalTitle" class="modal-title">Modifier l'icône</div>
+      <div id="changeIconGrid" class="icon-grid"></div>
+      <div class="custom-icon-row">
+        <span>Ou saisir n'importe quel emoji :</span>
+        <input type="text" id="inputChangeCustomIcon" maxlength="4" style="width: 60px; text-align: center; font-size: 16px;">
+      </div>
+      <div class="modal-actions">
+        <button id="btnCloseChangeIconModal" class="btn-secondary">Annuler</button>
+        <button id="btnSaveChangedIcon" class="btn-primary">Appliquer</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'project_task_standalone_v1';
+
+    const AVAILABLE_ICONS = [
+      '📁', '📂', '🏗️', '🌉', '🏭', '🏢', '🚧', '⚙️',
+      '🔧', '🔩', '🔌', '⚡', '🔋', '📡', '📶', '🖥️',
+      '💻', '🤖', '🎛️', '📟', '🧭', '📐', '📏', '🔬',
+      '🚦', '🛑', '🚨', '🛡️', '🔒', '🔑', '📦', '🚚',
+      '🚛', '🚂', '🚢', '✈️', '🌐', '🗺️', '📍', '📋',
+      '📊', '📈', '📝', '✅', '⭐', '🔥', '💡', '▤'
+    ];
+
+    function getTodayISO() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function getDefaultState() {
+      return {
+        projects: [
+          {
+            id: 'proj-default',
+            name: 'MON PREMIER PROJET',
+            icon: '🏗️',
+            categories: [
+              {
+                id: 'cat-general',
+                name: 'GENERAL',
+                icon: '⚙️',
+                tasks: [
+                  {
+                    id: 't-welcome',
+                    title: 'Exemple de tâche (cliquez ici pour voir les notes et la durée)',
+                    done: false,
+                    priority: 'medium',
+                    startDate: getTodayISO(),
+                    duration: 2,
+                    notes: 'Toutes vos modifications sont sauvegardées automatiquement dans ce navigateur.'
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        activeProjectId: 'proj-default',
+        activeCategoryId: null,
+        selectedTaskId: null,
+        collapsedProjects: {},
+        filter: 'all',
+        viewMode: 'list',
+        calendarDate: getTodayISO()
+      };
+    }
+
+    let state = getDefaultState();
+    let saveTimeout = null;
+    let iconEditTarget = null;
+
+    document.getElementById('quickTaskStartDate').value = getTodayISO();
+
+    // Ouverture calendrier natif au clic sur champ date
+    document.querySelectorAll('.auto-picker').forEach(input => {
+      input.addEventListener('click', function() {
+        try {
+          if (typeof this.showPicker === 'function') this.showPicker();
+        } catch (e) {}
+      });
+    });
+
+    // Sélecteur d'icônes
+    function buildIconSelector(gridElementId, inputElementId, defaultIcon) {
+      const grid = document.getElementById(gridElementId);
+      const input = document.getElementById(inputElementId);
+      input.value = defaultIcon;
+      grid.innerHTML = '';
+
+      AVAILABLE_ICONS.forEach(icon => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `icon-option ${icon === defaultIcon ? 'selected' : ''}`;
+        btn.textContent = icon;
+        btn.onclick = () => {
+          input.value = icon;
+          grid.querySelectorAll('.icon-option').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+        };
+        grid.appendChild(btn);
+      });
+
+      input.oninput = () => {
+        grid.querySelectorAll('.icon-option').forEach(b => {
+          b.classList.toggle('selected', b.textContent === input.value.trim());
+        });
+      };
+    }
+
+    function openChangeIconModal(event, type, projId, catId = null) {
+      event.stopPropagation();
+      const proj = state.projects.find(p => p.id === projId);
+      if (!proj) return;
+
+      let currentIcon = '📁';
+      let label = proj.name;
+
+      if (type === 'project') {
+        currentIcon = proj.icon || '📁';
+      } else {
+        const cat = proj.categories.find(c => c.id === catId);
+        if (!cat) return;
+        currentIcon = cat.icon || '▤';
+        label = cat.name;
+      }
+
+      iconEditTarget = { type, projId, catId };
+      document.getElementById('changeIconModalTitle').textContent = `Icône : ${label}`;
+      buildIconSelector('changeIconGrid', 'inputChangeCustomIcon', currentIcon);
+      document.getElementById('modalChangeIcon').classList.add('open');
+    }
+
+    document.getElementById('btnCloseChangeIconModal').onclick = () => {
+      document.getElementById('modalChangeIcon').classList.remove('open');
+      iconEditTarget = null;
+    };
+
+    document.getElementById('btnSaveChangedIcon').onclick = () => {
+      if (!iconEditTarget) return;
+      const newIcon = document.getElementById('inputChangeCustomIcon').value.trim() || '📁';
+      const proj = state.projects.find(p => p.id === iconEditTarget.projId);
+      if (proj) {
+        if (iconEditTarget.type === 'project') {
+          proj.icon = newIcon;
+        } else {
+          const cat = proj.categories.find(c => c.id === iconEditTarget.catId);
+          if (cat) cat.icon = newIcon;
+        }
+        saveState();
+      }
+      document.getElementById('modalChangeIcon').classList.remove('open');
+      iconEditTarget = null;
+    };
+
+    function computeEndDate(startDateStr, durationDays) {
+      if (!startDateStr) return null;
+      const days = Math.max(1, parseInt(durationDays) || 1);
+      const d = new Date(startDateStr + 'T00:00:00');
+      d.setDate(d.getDate() + (days - 1));
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatDateFr(dateStr) {
+      if (!dateStr) return '—';
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+
+    // --- CHARGEMENT & SAUVEGARDE LOCALE (localStorage) ---
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const loaded = JSON.parse(raw);
+          state = { ...getDefaultState(), ...loaded };
+        }
+        if (!state.collapsedProjects) state.collapsedProjects = {};
+        if (!state.viewMode) state.viewMode = 'list';
+        if (!state.calendarDate) state.calendarDate = getTodayISO();
+
+        state.projects.forEach(p => {
+          if (!p.icon) p.icon = '📁';
+          p.categories.forEach(c => {
+            if (!c.icon) c.icon = '▤';
+            c.tasks.forEach(t => {
+              if (!t.startDate && t.dueDate) t.startDate = t.dueDate;
+              if (!t.duration) t.duration = 1;
+            });
+          });
+        });
+      } catch (err) {
+        console.error("Erreur de lecture localStorage :", err);
+      }
+      render();
+    }
+
+    function saveState(reRender = true) {
+      if (reRender) render();
+      
+      const indicator = document.getElementById('drawerSaveIndicator');
+      if (indicator) {
+        indicator.classList.add('visible');
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => indicator.classList.remove('visible'), 1500);
+      }
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (err) {
+        alert("Erreur lors de la sauvegarde locale (espace plein ?). Pensez à exporter vos données.");
+      }
+    }
+
+    // --- EXPORT / IMPORT JSON ---
+    document.getElementById('btnExportData').onclick = () => {
+      const dataStr = JSON.stringify(state, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ProjectTask_Sauvegarde_${getTodayISO()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('btnImportData').onclick = () => {
+      document.getElementById('fileImportInput').click();
+    };
+
+    document.getElementById('fileImportInput').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const imported = JSON.parse(event.target.result);
+          if (!imported.projects || !Array.isArray(imported.projects)) {
+            throw new Error("Format de fichier invalide.");
+          }
+          if (confirm("Remplacer les projets actuels par ceux du fichier importé ?")) {
+            state = { ...getDefaultState(), ...imported };
+            state.selectedTaskId = null;
+            saveState(true);
+          }
+        } catch (err) {
+          alert("Impossible d'importer ce fichier : " + err.message);
+        }
+        e.target.value = '';
+      };
+      reader.readAsText(file);
+    };
+
+    // --- RENDU DE L'INTERFACE ---
+    function render() {
+      renderProjectsSidebar();
+      renderQuickTaskOptions();
+      updateViewVisibility();
+      if (state.viewMode === 'list') {
+        renderCategoriesAndTasks();
+      } else {
+        renderCalendar();
+      }
+      renderRightDrawer();
+      renderGlobalStats();
+    }
+
+    function updateViewVisibility() {
+      const listContainer = document.getElementById('listViewContainer');
+      const calContainer = document.getElementById('calendarViewContainer');
+      const btnList = document.getElementById('btnViewList');
+      const btnCal = document.getElementById('btnViewCalendar');
+
+      if (state.viewMode === 'calendar') {
+        listContainer.style.display = 'none';
+        calContainer.classList.add('active');
+        btnList.classList.remove('active');
+        btnCal.classList.add('active');
+      } else {
+        listContainer.style.display = 'block';
+        calContainer.classList.remove('active');
+        btnList.classList.add('active');
+        btnCal.classList.remove('active');
+      }
+    }
+
+    function renderProjectsSidebar() {
+      const container = document.getElementById('projectsList');
+      container.innerHTML = '';
+      if (!state.projects) return;
+
+      state.projects.forEach(proj => {
+        let total = 0, done = 0;
+        proj.categories.forEach(c => {
+          total += c.tasks.length;
+          done += c.tasks.filter(t => t.done).length;
+        });
+
+        const isProjActive = proj.id === state.activeProjectId && state.activeCategoryId === null;
+        const isCollapsed = state.collapsedProjects[proj.id] || false;
+        const projIcon = proj.icon || '📁';
+
+        const group = document.createElement('div');
+        group.className = 'proj-group';
+
+        const item = document.createElement('div');
+        item.className = `proj-item ${isProjActive ? 'active' : ''}`;
+        item.onclick = () => {
+          state.activeProjectId = proj.id;
+          state.activeCategoryId = null;
+          state.selectedTaskId = null;
+          saveState();
+        };
+
+        item.innerHTML = `
+          <div class="proj-left">
+            <button onclick="toggleCollapse(event, '${proj.id}')" style="font-size: 10px; width: 14px;">${isCollapsed ? '▶' : '▼'}</button>
+            <span class="icon-clickable" onclick="openChangeIconModal(event, 'project', '${proj.id}')" title="Changer l'icône">${projIcon}</span>
+            <span class="proj-name" ondblclick="editProjectName(event, '${proj.id}')">${proj.name}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <button onclick="openCategoryModalFor(event, '${proj.id}')" class="btn-add-sub" title="Ajouter sous-catégorie">+</button>
+            <span class="badge-count">${done}/${total}</span>
+          </div>
+        `;
+        group.appendChild(item);
+
+        if (!isCollapsed && proj.categories) {
+          const subNav = document.createElement('div');
+          subNav.className = 'sub-nav';
+
+          proj.categories.forEach(cat => {
+            const catDone = cat.tasks.filter(t => t.done).length;
+            const isCatActive = proj.id === state.activeProjectId && cat.id === state.activeCategoryId;
+            const catIcon = cat.icon || '▤';
+
+            const catEl = document.createElement('div');
+            catEl.className = `cat-item ${isCatActive ? 'active' : ''}`;
+            catEl.onclick = (e) => {
+              e.stopPropagation();
+              state.activeProjectId = proj.id;
+              state.activeCategoryId = cat.id;
+              state.selectedTaskId = null;
+              saveState();
+            };
+
+            catEl.innerHTML = `
+              <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+                <span class="icon-clickable" onclick="openChangeIconModal(event, 'category', '${proj.id}', '${cat.id}')" title="Changer l'icône">${catIcon}</span>
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" ondblclick="editCategoryName(event, '${proj.id}', '${cat.id}')">${cat.name}</span>
+              </div>
+              <span style="font-family: monospace; font-size: 11px;">${catDone}/${cat.tasks.length}</span>
+            `;
+            subNav.appendChild(catEl);
+          });
+          group.appendChild(subNav);
+        }
+
+        container.appendChild(group);
+      });
+    }
+
+    function renderQuickTaskOptions() {
+      const select = document.getElementById('quickTaskCategory');
+      select.innerHTML = '';
+      const proj = state.projects.find(p => p.id === state.activeProjectId);
+
+      if (!proj || proj.categories.length === 0) {
+        select.innerHTML = `<option value="">(Aucune)</option>`;
+        return;
+      }
+
+      proj.categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || '▤'} ${c.name}`;
+        if (state.activeCategoryId && c.id === state.activeCategoryId) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderCategoriesAndTasks() {
+      const currentProj = state.projects ? state.projects.find(p => p.id === state.activeProjectId) : null;
+      const titleEl = document.getElementById('currentProjectTitle');
+      const descEl = document.getElementById('currentProjectDesc');
+      const container = document.getElementById('categoriesContainer');
+      const statsEl = document.getElementById('projectStats');
+
+      if (!currentProj) {
+        titleEl.textContent = "Aucun projet sélectionné";
+        descEl.textContent = "Créez ou sélectionnez un projet dans le menu à gauche.";
+        container.innerHTML = '';
+        statsEl.textContent = '0 tâche';
+        return;
+      }
+
+      const activeCatObj = state.activeCategoryId ? currentProj.categories.find(c => c.id === state.activeCategoryId) : null;
+      
+      if (activeCatObj) {
+        titleEl.innerHTML = `<span class="icon-clickable" onclick="openChangeIconModal(event, 'project', '${currentProj.id}')">${currentProj.icon || '📁'}</span> ${currentProj.name} / <span class="icon-clickable" onclick="openChangeIconModal(event, 'category', '${currentProj.id}', '${activeCatObj.id}')">${activeCatObj.icon || '▤'}</span> ${activeCatObj.name}`;
+        descEl.textContent = `Sous-catégorie "${activeCatObj.name}"`;
+      } else {
+        titleEl.innerHTML = `<span class="icon-clickable" onclick="openChangeIconModal(event, 'project', '${currentProj.id}')" title="Changer l'icône du projet">${currentProj.icon || '📁'}</span> ${currentProj.name}`;
+        descEl.textContent = `${currentProj.categories.length} sous-catégorie(s)`;
+      }
+
+      container.innerHTML = '';
+      let totalTasksCount = 0;
+
+      const categoriesToDisplay = activeCatObj ? [activeCatObj] : currentProj.categories;
+
+      categoriesToDisplay.forEach(cat => {
+        let filteredTasks = cat.tasks;
+        if (state.filter === 'todo') filteredTasks = filteredTasks.filter(t => !t.done);
+        if (state.filter === 'done') filteredTasks = filteredTasks.filter(t => t.done);
+
+        totalTasksCount += filteredTasks.length;
+
+        const catDiv = document.createElement('div');
+        catDiv.className = 'category-card';
+
+        catDiv.innerHTML = `
+          <div class="category-card-header">
+            <div class="cat-title-wrap">
+              <span class="icon-clickable" onclick="openChangeIconModal(event, 'category', '${currentProj.id}', '${cat.id}')" title="Changer l'icône">${cat.icon || '▤'}</span>
+              <span>${cat.name}</span>
+              <span class="badge-count">${filteredTasks.length}</span>
+            </div>
+            <button onclick="deleteCategory('${cat.id}')" style="color: var(--text-dim);" title="Supprimer">🗑️</button>
+          </div>
+          <div class="task-list"></div>
+        `;
+
+        const listEl = catDiv.querySelector('.task-list');
+
+        if (filteredTasks.length === 0) {
+          listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-dim); font-style: italic; padding: 6px 0;">Aucune tâche dans cette catégorie.</div>`;
+        } else {
+          filteredTasks.forEach(task => {
+            const isSelected = state.selectedTaskId === task.id;
+            const row = document.createElement('div');
+            row.className = `task-row ${isSelected ? 'selected' : ''} ${task.done ? 'done' : ''}`;
+
+            row.onclick = () => {
+              state.selectedTaskId = task.id;
+              renderCategoriesAndTasks();
+              renderRightDrawer();
+            };
+
+            const hasNotes = (task.notes && task.notes.trim().length > 0) ? `<span title="Contient des notes">📝</span>` : '';
+            
+            let scheduleBadge = '';
+            if (task.startDate) {
+              const dur = task.duration || 1;
+              scheduleBadge = `<span class="date-pill">📅 ${formatDateFr(task.startDate)} • <strong>${dur}j</strong></span>`;
+            }
+
+            row.innerHTML = `
+              <div class="task-left">
+                <button onclick="toggleTask(event, '${cat.id}', '${task.id}')" class="checkbox ${task.done ? 'checked' : ''}">
+                  ${task.done ? '✓' : ''}
+                </button>
+                <span class="task-title">${task.title}</span>
+              </div>
+              <div class="task-right">
+                ${hasNotes}
+                ${scheduleBadge}
+                <span class="prio prio-${task.priority}">${task.priority}</span>
+                <span style="color: var(--text-dim);">›</span>
+              </div>
+            `;
+            listEl.appendChild(row);
+          });
+        }
+
+        container.appendChild(catDiv);
+      });
+
+      statsEl.textContent = `${totalTasksCount} tâche(s) affichée(s)`;
+    }
+
+    // --- VUE CALENDRIER ---
+    function renderCalendar() {
+      const currentProj = state.projects ? state.projects.find(p => p.id === state.activeProjectId) : null;
+      const titleEl = document.getElementById('currentProjectTitle');
+      const descEl = document.getElementById('currentProjectDesc');
+      const grid = document.getElementById('calendarGrid');
+      const monthLabel = document.getElementById('calMonthLabel');
+
+      if (!currentProj) {
+        titleEl.textContent = "Calendrier";
+        descEl.textContent = "Sélectionnez un projet dans la barre latérale.";
+        grid.innerHTML = '';
+        return;
+      }
+
+      titleEl.textContent = `Planning : ${currentProj.icon || '📁'} ${currentProj.name}`;
+      descEl.textContent = "Visualisez l'étalement des tâches selon leur date de début et leur durée en jours.";
+
+      const refDate = new Date(state.calendarDate + 'T00:00:00');
+      const year = refDate.getFullYear();
+      const month = refDate.getMonth();
+
+      monthLabel.textContent = refDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+      const plannedTasks = [];
+      const cats = state.activeCategoryId 
+        ? currentProj.categories.filter(c => c.id === state.activeCategoryId) 
+        : currentProj.categories;
+
+      cats.forEach(cat => {
+        cat.tasks.forEach(t => {
+          if (t.startDate) {
+            const endStr = computeEndDate(t.startDate, t.duration || 1);
+            plannedTasks.push({ ...t, catName: cat.name, catIcon: cat.icon || '▤', endDate: endStr });
+          }
+        });
+      });
+
+      const firstDayOfMonth = new Date(year, month, 1);
+      let startDay = firstDayOfMonth.getDay();
+      startDay = startDay === 0 ? 6 : startDay - 1;
+
+      const gridStartDate = new Date(year, month, 1 - startDay);
+      const todayStr = getTodayISO();
+
+      grid.innerHTML = '';
+
+      for (let i = 0; i < 42; i++) {
+        const cellDate = new Date(gridStartDate);
+        cellDate.setDate(gridStartDate.getDate() + i);
+        const y = cellDate.getFullYear();
+        const m = String(cellDate.getMonth() + 1).padStart(2, '0');
+        const d = String(cellDate.getDate()).padStart(2, '0');
+        const cellStr = `${y}-${m}-${d}`;
+
+        const isCurrentMonth = cellDate.getMonth() === month;
+        const isToday = cellStr === todayStr;
+
+        const cell = document.createElement('div');
+        cell.className = `cal-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}`;
+
+        cell.innerHTML = `
+          <div class="cal-day-num">
+            <span>${cellDate.getDate()}</span>
+          </div>
+        `;
+
+        plannedTasks.forEach(task => {
+          if (cellStr >= task.startDate && cellStr <= task.endDate) {
+            const ev = document.createElement('div');
+            ev.className = `cal-event cal-ev-${task.priority} ${task.done ? 'done' : ''}`;
+            const isStart = cellStr === task.startDate;
+            ev.textContent = isStart ? `${task.catIcon} ${task.title} (${task.duration || 1}j)` : `↳ ${task.title}`;
+            ev.title = `[${task.catName}] ${task.title} (${formatDateFr(task.startDate)} → ${formatDateFr(task.endDate)})`;
+
+            ev.onclick = (e) => {
+              e.stopPropagation();
+              state.selectedTaskId = task.id;
+              renderRightDrawer();
+            };
+
+            cell.appendChild(ev);
+          }
+        });
+
+        grid.appendChild(cell);
+      }
+    }
+
+    // --- VOLET LATÉRAL DROIT (DÉTAILS) ---
+    function findSelectedTaskContext() {
+      if (!state.selectedTaskId || !state.activeProjectId) return null;
+      const proj = state.projects.find(p => p.id === state.activeProjectId);
+      if (!proj) return null;
+
+      for (const cat of proj.categories) {
+        const task = cat.tasks.find(t => t.id === state.selectedTaskId);
+        if (task) return { proj, cat, task };
+      }
+      return null;
+    }
+
+    function renderRightDrawer() {
+      const drawer = document.getElementById('taskDetailDrawer');
+      const ctx = findSelectedTaskContext();
+
+      if (!ctx) {
+        drawer.classList.remove('open');
+        return;
+      }
+
+      drawer.classList.add('open');
+      const { proj, cat, task } = ctx;
+
+      const toggleBtn = document.getElementById('drawerToggleDone');
+      toggleBtn.className = `checkbox ${task.done ? 'checked' : ''}`;
+      toggleBtn.textContent = task.done ? '✓' : '';
+
+      const titleInput = document.getElementById('drawerTaskTitle');
+      if (document.activeElement !== titleInput) titleInput.value = task.title;
+
+      const notesInput = document.getElementById('drawerTaskNotes');
+      if (document.activeElement !== notesInput) notesInput.value = task.notes || '';
+
+      document.getElementById('drawerTaskPriority').value = task.priority || 'medium';
+      document.getElementById('drawerTaskStartDate').value = task.startDate || '';
+      document.getElementById('drawerTaskDuration').value = task.duration || 1;
+
+      const endStr = computeEndDate(task.startDate, task.duration || 1);
+      document.getElementById('drawerEndDateValue').textContent = endStr ? formatDateFr(endStr) : 'Non définie';
+
+      const catSelect = document.getElementById('drawerTaskCategory');
+      catSelect.innerHTML = '';
+      proj.categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || '▤'} ${c.name}`;
+        if (c.id === cat.id) opt.selected = true;
+        catSelect.appendChild(opt);
+      });
+    }
+
+    // Événements Volet Droit
+    document.getElementById('btnCloseDrawer').onclick = () => {
+      state.selectedTaskId = null;
+      render();
+    };
+
+    document.getElementById('drawerToggleDone').onclick = () => {
+      const ctx = findSelectedTaskContext();
+      if (ctx) {
+        ctx.task.done = !ctx.task.done;
+        saveState();
+      }
+    };
+
+    document.getElementById('drawerTaskTitle').oninput = (e) => {
+      const ctx = findSelectedTaskContext();
+      if (ctx) {
+        ctx.task.title = e.target.value;
+        saveState(true);
+      }
+    };
+
+    document.getElementById('drawerTaskNotes').oninput = (e) => {
+      const ctx = findSelectedTaskContext();
+      if (ctx) {
+        ctx.task.notes = e.target.value;
+        saveState(false);
+        if (state.viewMode === 'list') renderCategoriesAndTasks();
+      }
+    };
+
+    document.getElementById('drawerTaskPriority').onchange = (e) => {
+      const ctx = findSelectedTaskContext();
+      if (ctx) {
+        ctx.task.priority = e.target.value;
+        saveState();
+      }
+    };
+
+    document.getElementById('drawerTaskStartDate').onchange = (e) => {
+      const ctx = findSelectedTaskContext();
+      if (ctx) {
+        ctx.task.startDate = e.target.value;
+        saveState();
+      }
+    };
+
+    document.getElementById('drawerTaskDuration').oninput = (e) => {
+      const ctx = findSelectedTaskContext();
+      if (ctx) {
+        ctx.task.duration = Math.max(1, parseInt(e.target.value) || 1);
+        saveState();
+      }
+    };
+
+    document.getElementById('drawerTaskCategory').onchange = (e) => {
+      const newCatId = e.target.value;
+      const ctx = findSelectedTaskContext();
+      if (ctx && ctx.cat.id !== newCatId) {
+        ctx.cat.tasks = ctx.cat.tasks.filter(t => t.id !== ctx.task.id);
+        const targetCat = ctx.proj.categories.find(c => c.id === newCatId);
+        if (targetCat) {
+          targetCat.tasks.push(ctx.task);
+          saveState();
+        }
+      }
+    };
+
+    document.getElementById('drawerDeleteTask').onclick = () => {
+      const ctx = findSelectedTaskContext();
+      if (ctx && confirm('Supprimer définitivement cette tâche ?')) {
+        ctx.cat.tasks = ctx.cat.tasks.filter(t => t.id !== ctx.task.id);
+        state.selectedTaskId = null;
+        saveState();
+      }
+    };
+
+    // Navigation Calendrier
+    document.getElementById('btnViewList').onclick = () => { state.viewMode = 'list'; render(); };
+    document.getElementById('btnViewCalendar').onclick = () => { state.viewMode = 'calendar'; render(); };
+
+    document.getElementById('btnPrevMonth').onclick = () => {
+      const d = new Date(state.calendarDate + 'T00:00:00');
+      d.setMonth(d.getMonth() - 1);
+      state.calendarDate = d.toISOString().slice(0, 10);
+      renderCalendar();
+    };
+
+    document.getElementById('btnNextMonth').onclick = () => {
+      const d = new Date(state.calendarDate + 'T00:00:00');
+      d.setMonth(d.getMonth() + 1);
+      state.calendarDate = d.toISOString().slice(0, 10);
+      renderCalendar();
+    };
+
+    document.getElementById('btnTodayMonth').onclick = () => {
+      state.calendarDate = getTodayISO();
+      renderCalendar();
+    };
+
+    function renderGlobalStats() {
+      let total = 0, done = 0;
+      if (state.projects) {
+        state.projects.forEach(p => {
+          p.categories.forEach(c => {
+            total += c.tasks.length;
+            done += c.tasks.filter(t => t.done).length;
+          });
+        });
+      }
+      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+      document.getElementById('globalProgressBar').style.width = pct + '%';
+      document.getElementById('globalProgressPercentage').textContent = pct + '%';
+    }
+
+    // Ajout Rapide
+    document.getElementById('quickTaskForm').onsubmit = (e) => {
+      e.preventDefault();
+      const titleInput = document.getElementById('quickTaskTitle');
+      const startDateInput = document.getElementById('quickTaskStartDate');
+      const durationInput = document.getElementById('quickTaskDuration');
+
+      const title = titleInput.value.trim();
+      const catId = document.getElementById('quickTaskCategory').value;
+      const priority = document.getElementById('quickTaskPriority').value;
+      const startDate = startDateInput.value || getTodayISO();
+      const duration = Math.max(1, parseInt(durationInput.value) || 1);
+
+      if (!title) return;
+      const proj = state.projects.find(p => p.id === state.activeProjectId);
+      if (!proj) return alert('Sélectionnez d\'abord un projet.');
+      if (!catId) return alert('Créez d\'abord une sous-catégorie.');
+
+      const targetCat = proj.categories.find(c => c.id === catId);
+      if (targetCat) {
+        targetCat.tasks.push({
+          id: 't-' + Date.now(),
+          title,
+          done: false,
+          priority,
+          startDate,
+          duration,
+          notes: ''
+        });
+        titleInput.value = '';
+        startDateInput.value = getTodayISO();
+        durationInput.value = 1;
+        saveState();
+      }
+    };
+
+    // Actions diverses
+    function toggleCollapse(event, projId) {
+      event.stopPropagation();
+      state.collapsedProjects[projId] = !state.collapsedProjects[projId];
+      saveState();
+    }
+
+    function openCategoryModalFor(event, projId) {
+      event.stopPropagation();
+      state.activeProjectId = projId;
+      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '⚙️');
+      document.getElementById('modalCategory').classList.add('open');
+    }
+
+    function editProjectName(event, projId) {
+      event.stopPropagation();
+      const proj = state.projects.find(p => p.id === projId);
+      if (!proj) return;
+      const newName = prompt("Nouveau nom du projet :", proj.name);
+      if (newName && newName.trim()) {
+        proj.name = newName.trim();
+        saveState();
+      }
+    }
+
+    function editCategoryName(event, projId, catId) {
+      event.stopPropagation();
+      const proj = state.projects.find(p => p.id === projId);
+      if (!proj) return;
+      const cat = proj.categories.find(c => c.id === catId);
+      if (!cat) return;
+      const newName = prompt("Nouveau nom de la sous-catégorie :", cat.name);
+      if (newName && newName.trim()) {
+        cat.name = newName.trim();
+        saveState();
+      }
+    }
+
+    function deleteCategory(catId) {
+      const proj = state.projects.find(p => p.id === state.activeProjectId);
+      if (!proj) return;
+      if (confirm('Supprimer cette sous-catégorie et toutes ses tâches ?')) {
+        proj.categories = proj.categories.filter(c => c.id !== catId);
+        if (state.activeCategoryId === catId) state.activeCategoryId = null;
+        state.selectedTaskId = null;
+        saveState();
+      }
+    }
+
+    function toggleTask(event, catId, taskId) {
+      event.stopPropagation();
+      const proj = state.projects.find(p => p.id === state.activeProjectId);
+      if (!proj) return;
+      const cat = proj.categories.find(c => c.id === catId);
+      if (!cat) return;
+      const task = cat.tasks.find(t => t.id === taskId);
+      if (task) {
+        task.done = !task.done;
+        saveState();
+      }
+    }
+
+    // Modals Création Projet & Sous-catégorie
+    document.getElementById('btnNewProject').onclick = () => {
+      buildIconSelector('projectIconGrid', 'inputProjectCustomIcon', '🏗️');
+      document.getElementById('modalProject').classList.add('open');
+    };
+    document.getElementById('btnCloseProjectModal').onclick = () => document.getElementById('modalProject').classList.remove('open');
+    
+    document.getElementById('btnSaveProject').onclick = () => {
+      const name = document.getElementById('inputProjectName').value.trim();
+      const icon = document.getElementById('inputProjectCustomIcon').value.trim() || '📁';
+      if (name) {
+        const newProj = {
+          id: 'proj-' + Date.now(),
+          name,
+          icon,
+          categories: [{ id: 'cat-' + Date.now(), name: 'GENERAL', icon: '⚙️', tasks: [] }]
+        };
+        if (!state.projects) state.projects = [];
+        state.projects.push(newProj);
+        state.activeProjectId = newProj.id;
+        state.activeCategoryId = null;
+        state.selectedTaskId = null;
+        document.getElementById('inputProjectName').value = '';
+        document.getElementById('modalProject').classList.remove('open');
+        saveState();
+      }
+    };
+
+    document.getElementById('btnNewCategory').onclick = () => {
+      if (!state.activeProjectId) return alert('Sélectionnez d\'abord un projet.');
+      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '⚙️');
+      document.getElementById('modalCategory').classList.add('open');
+    };
+    document.getElementById('btnCloseCategoryModal').onclick = () => document.getElementById('modalCategory').classList.remove('open');
+
+    document.getElementById('btnSaveCategory').onclick = () => {
+      const name = document.getElementById('inputCategoryName').value.trim();
+      const icon = document.getElementById('inputCategoryCustomIcon').value.trim() || '▤';
+      if (name) {
+        const proj = state.projects.find(p => p.id === state.activeProjectId);
+        if (proj) {
+          proj.categories.push({ id: 'cat-' + Date.now(), name, icon, tasks: [] });
+          document.getElementById('inputCategoryName').value = '';
+          document.getElementById('modalCategory').classList.remove('open');
+          saveState();
+        }
+      }
+    };
+
+    document.getElementById('btnDeleteProject').onclick = () => {
+      if (!state.activeProjectId) return;
+      if (confirm('Supprimer ce projet et tout son contenu ?')) {
+        state.projects = state.projects.filter(p => p.id !== state.activeProjectId);
+        state.activeProjectId = state.projects.length > 0 ? state.projects[0].id : null;
+        state.activeCategoryId = null;
+        state.selectedTaskId = null;
+        saveState();
+      }
+    };
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.onclick = (e) => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        state.filter = e.target.dataset.filter;
+        renderCategoriesAndTasks();
+      };
+    });
+
+    loadState();
+  </script>
+</body>
+</html>
