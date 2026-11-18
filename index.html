@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ProjectTask - Gestionnaire & Calendrier (Autonome)</title>
+  <title>ProjectTask - Gestionnaire & Calendrier (Cloud)</title>
   <style>
     :root {
       --bg-dark: #020617;
@@ -74,6 +74,7 @@
     .progress-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
     .progress-bar-bg { width: 100%; height: 6px; background: var(--bg-card); border-radius: 4px; overflow: hidden; }
     .progress-bar-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+    .cloud-status { font-size: 11px; color: #34d399; margin-top: 10px; display: flex; align-items: center; gap: 6px; }
 
     /* ZONE CENTRALE */
     .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
@@ -211,6 +212,7 @@
       <div class="progress-bar-bg">
         <div id="globalProgressBar" class="progress-bar-fill"></div>
       </div>
+      <div id="cloudSyncStatus" class="cloud-status">⏳ Connexion au cloud...</div>
     </div>
   </aside>
 
@@ -219,10 +221,10 @@
     <header class="main-header">
       <div>
         <div class="header-title-row">
-          <h2 id="currentProjectTitle" class="header-title">Sélectionnez un projet</h2>
+          <h2 id="currentProjectTitle" class="header-title">Chargement...</h2>
           <button id="btnDeleteProject" style="color: var(--text-dim);" title="Supprimer le projet">🗑️</button>
         </div>
-        <p id="currentProjectDesc" class="header-desc">Sauvegarde automatique locale • Export JSON disponible.</p>
+        <p id="currentProjectDesc" class="header-desc">Synchronisation automatique en temps réel (Cloud).</p>
       </div>
 
       <div class="header-actions">
@@ -232,8 +234,8 @@
         </div>
 
         <button id="btnNewCategory" class="btn-secondary">📁+ Sous-catégorie</button>
-        <button id="btnExportData" class="btn-secondary" title="Télécharger une sauvegarde JSON">💾 Exporter</button>
-        <button id="btnImportData" class="btn-secondary" title="Restaurer depuis un fichier JSON">📂 Importer</button>
+        <button id="btnExportData" class="btn-secondary" title="Télécharger une copie JSON">💾 Exporter</button>
+        <button id="btnImportData" class="btn-secondary" title="Importer un fichier JSON vers le cloud">📂 Importer</button>
         <input type="file" id="fileImportInput" accept=".json" style="display: none;">
       </div>
     </header>
@@ -355,14 +357,14 @@
       <div class="field-group" style="flex: 1;">
         <label class="field-label">
           <span>📝 Notes & Description</span>
-          <span id="drawerSaveIndicator" class="save-badge">Enregistré ✓</span>
+          <span id="drawerSaveIndicator" class="save-badge">Synchronisé ✓</span>
         </label>
         <textarea id="drawerTaskNotes" style="flex: 1; min-height: 150px; resize: vertical; line-height: 1.5;" placeholder="Ajoutez vos notes, remarques ou liens ici..."></textarea>
       </div>
     </div>
 
     <div class="drawer-footer">
-      <span style="font-size: 11px; color: var(--text-dim);">Sauvegarde locale auto</span>
+      <span style="font-size: 11px; color: var(--text-dim);">Sauvegarde cloud auto</span>
       <button id="drawerDeleteTask" class="btn-delete-task">🗑️ Supprimer</button>
     </div>
   </aside>
@@ -429,8 +431,23 @@
     </div>
   </div>
 
+  <!-- BIBLIOTHÈQUES FIREBASE -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
   <script>
-    const STORAGE_KEY = 'project_task_standalone_v1';
+    const firebaseConfig = {
+      apiKey: "AIzaSyDenEqqbR8SaMmYYr-S6I4bjtJqGsPW1CE",
+      authDomain: "projet-task-195d6.firebaseapp.com",
+      projectId: "projet-task-195d6",
+      storageBucket: "projet-task-195d6.firebasestorage.app",
+      messagingSenderId: "857140482438",
+      appId: "1:857140482438:web:4cd1a038c113cc74eedc07"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const docRef = db.collection("projectTask").doc("donnees_principales");
 
     const AVAILABLE_ICONS = [
       '📁', '📂', '🏗️', '🌉', '🏭', '🏢', '🚧', '⚙️',
@@ -464,12 +481,12 @@
                 tasks: [
                   {
                     id: 't-welcome',
-                    title: 'Exemple de tâche (cliquez ici pour voir les notes et la durée)',
+                    title: 'Exemple de tâche synchronisée dans le cloud',
                     done: false,
                     priority: 'medium',
                     startDate: getTodayISO(),
                     duration: 2,
-                    notes: 'Toutes vos modifications sont sauvegardées automatiquement dans ce navigateur.'
+                    notes: 'Toutes vos modifications sont sauvegardées automatiquement en ligne.'
                   }
                 ]
               }
@@ -492,7 +509,6 @@
 
     document.getElementById('quickTaskStartDate').value = getTodayISO();
 
-    // Ouverture calendrier natif au clic sur champ date
     document.querySelectorAll('.auto-picker').forEach(input => {
       input.addEventListener('click', function() {
         try {
@@ -501,7 +517,126 @@
       });
     });
 
-    // Sélecteur d'icônes
+    function normalizeStateData(raw) {
+      const merged = { ...getDefaultState(), ...raw };
+      if (!merged.collapsedProjects) merged.collapsedProjects = {};
+      if (!merged.viewMode) merged.viewMode = 'list';
+      if (!merged.calendarDate) merged.calendarDate = getTodayISO();
+
+      merged.projects.forEach(p => {
+        if (!p.icon) p.icon = '📁';
+        if (!p.categories) p.categories = [];
+        p.categories.forEach(c => {
+          if (!c.icon) c.icon = '▤';
+          if (!c.tasks) c.tasks = [];
+          c.tasks.forEach(t => {
+            if (!t.startDate && t.dueDate) t.startDate = t.dueDate;
+            if (!t.duration) t.duration = 1;
+          });
+        });
+      });
+      return merged;
+    }
+
+    // --- SYNCHRONISATION TEMPS RÉEL AVEC FIREBASE ---
+    function initCloudSync() {
+      const statusEl = document.getElementById('cloudSyncStatus');
+
+      docRef.onSnapshot((doc) => {
+        if (doc.exists) {
+          const activeEl = document.activeElement;
+          const isTypingInDrawer = activeEl && (activeEl.id === 'drawerTaskNotes' || activeEl.id === 'drawerTaskTitle');
+          
+          const incoming = normalizeStateData(doc.data());
+          incoming.activeProjectId = state.activeProjectId && incoming.projects.some(p => p.id === state.activeProjectId)
+            ? state.activeProjectId
+            : (incoming.projects[0]?.id || null);
+          incoming.activeCategoryId = state.activeCategoryId;
+          incoming.selectedTaskId = state.selectedTaskId;
+          incoming.viewMode = state.viewMode;
+          incoming.filter = state.filter;
+          incoming.calendarDate = state.calendarDate;
+
+          state = incoming;
+          if (!isTypingInDrawer) render();
+        } else {
+          saveState(false);
+        }
+        statusEl.textContent = '🟢 Synchronisé en ligne';
+        statusEl.style.color = '#34d399';
+      }, (err) => {
+        console.error("Erreur Firebase :", err);
+        statusEl.textContent = '🔴 Erreur connexion Firebase';
+        statusEl.style.color = '#f87171';
+        render();
+      });
+    }
+
+    async function saveState(reRender = true) {
+      if (reRender) render();
+
+      const indicator = document.getElementById('drawerSaveIndicator');
+      const statusEl = document.getElementById('cloudSyncStatus');
+      if (statusEl) {
+        statusEl.textContent = '🔄 Enregistrement...';
+        statusEl.style.color = '#fbbf24';
+      }
+
+      try {
+        const cleanState = JSON.parse(JSON.stringify(state));
+        await docRef.set(cleanState);
+
+        if (statusEl) {
+          statusEl.textContent = '🟢 Synchronisé en ligne';
+          statusEl.style.color = '#34d399';
+        }
+        if (indicator) {
+          indicator.classList.add('visible');
+          clearTimeout(saveTimeout);
+          saveTimeout = setTimeout(() => indicator.classList.remove('visible'), 1500);
+        }
+      } catch (err) {
+        console.error("Erreur lors de l'enregistrement cloud :", err);
+        if (statusEl) {
+          statusEl.textContent = '🔴 Échec sauvegarde cloud';
+          statusEl.style.color = '#f87171';
+        }
+      }
+    }
+
+    // --- UTILITAIRES DATES ---
+    function computeEndDate(startDateStr, durationDays) {
+      if (!startDateStr) return null;
+      const days = Math.max(1, parseInt(durationDays) || 1);
+      const d = new Date(startDateStr + 'T00:00:00');
+      d.setDate(d.getDate() + (days - 1));
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatDateFr(dateStr) {
+      if (!dateStr) return '—';
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+
+    function getActiveProject() {
+      return state.projects.find(p => p.id === state.activeProjectId) || state.projects[0] || null;
+    }
+
+    function findTaskLocation(taskId) {
+      for (const proj of state.projects) {
+        for (const cat of proj.categories) {
+          const task = cat.tasks.find(t => t.id === taskId);
+          if (task) return { proj, cat, task };
+        }
+      }
+      return null;
+    }
+
+    // --- SÉLECTEUR D'ICÔNES ---
     function buildIconSelector(gridElementId, inputElementId, defaultIcon) {
       const grid = document.getElementById(gridElementId);
       const input = document.getElementById(inputElementId);
@@ -573,67 +708,505 @@
       iconEditTarget = null;
     };
 
-    function computeEndDate(startDateStr, durationDays) {
-      if (!startDateStr) return null;
-      const days = Math.max(1, parseInt(durationDays) || 1);
-      const d = new Date(startDateStr + 'T00:00:00');
-      d.setDate(d.getDate() + (days - 1));
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
+    // --- MODALS PROJET & SOUS-CATÉGORIE ---
+    document.getElementById('btnNewProject').onclick = () => {
+      document.getElementById('inputProjectName').value = '';
+      buildIconSelector('projectIconGrid', 'inputProjectCustomIcon', '🏗️');
+      document.getElementById('modalProject').classList.add('open');
+      document.getElementById('inputProjectName').focus();
+    };
+
+    document.getElementById('btnCloseProjectModal').onclick = () => {
+      document.getElementById('modalProject').classList.remove('open');
+    };
+
+    document.getElementById('btnSaveProject').onclick = () => {
+      const name = document.getElementById('inputProjectName').value.trim();
+      if (!name) return;
+      const icon = document.getElementById('inputProjectCustomIcon').value.trim() || '📁';
+      const newProj = {
+        id: 'proj-' + Date.now(),
+        name,
+        icon,
+        categories: [{ id: 'cat-' + Date.now(), name: 'GENERAL', icon: '⚙️', tasks: [] }]
+      };
+      state.projects.push(newProj);
+      state.activeProjectId = newProj.id;
+      state.activeCategoryId = null;
+      document.getElementById('modalProject').classList.remove('open');
+      saveState();
+    };
+
+    document.getElementById('btnNewCategory').onclick = () => {
+      if (!getActiveProject()) return alert("Créez d'abord un projet.");
+      document.getElementById('inputCategoryName').value = '';
+      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '▤');
+      document.getElementById('modalCategory').classList.add('open');
+      document.getElementById('inputCategoryName').focus();
+    };
+
+    document.getElementById('btnCloseCategoryModal').onclick = () => {
+      document.getElementById('modalCategory').classList.remove('open');
+    };
+
+    document.getElementById('btnSaveCategory').onclick = () => {
+      const proj = getActiveProject();
+      if (!proj) return;
+      const name = document.getElementById('inputCategoryName').value.trim();
+      if (!name) return;
+      const icon = document.getElementById('inputCategoryCustomIcon').value.trim() || '▤';
+      proj.categories.push({ id: 'cat-' + Date.now(), name, icon, tasks: [] });
+      document.getElementById('modalCategory').classList.remove('open');
+      saveState();
+    };
+
+    document.getElementById('btnDeleteProject').onclick = () => {
+      const proj = getActiveProject();
+      if (!proj) return;
+      if (!confirm(`Supprimer le projet "${proj.name}" et toutes ses tâches ?`)) return;
+      state.projects = state.projects.filter(p => p.id !== proj.id);
+      state.activeProjectId = state.projects[0]?.id || null;
+      state.activeCategoryId = null;
+      state.selectedTaskId = null;
+      saveState();
+    };
+
+    // --- RENDU GLOBAL ---
+    function render() {
+      renderSidebar();
+      renderMainWorkspace();
+      renderCalendar();
+      renderDrawer();
     }
 
-    function formatDateFr(dateStr) {
-      if (!dateStr) return '—';
-      const [y, m, d] = dateStr.split('-');
-      return `${d}/${m}/${y}`;
-    }
+    function renderSidebar() {
+      const nav = document.getElementById('projectsList');
+      nav.innerHTML = '';
 
-    // --- CHARGEMENT & SAUVEGARDE LOCALE (localStorage) ---
-    function loadState() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const loaded = JSON.parse(raw);
-          state = { ...getDefaultState(), ...loaded };
+      let totalTasks = 0;
+      let doneTasks = 0;
+
+      state.projects.forEach(proj => {
+        let projTotal = 0;
+        proj.categories.forEach(c => {
+          projTotal += c.tasks.length;
+          totalTasks += c.tasks.length;
+          doneTasks += c.tasks.filter(t => t.done).length;
+        });
+
+        const group = document.createElement('div');
+        group.className = 'proj-group';
+
+        const isProjActive = proj.id === state.activeProjectId && !state.activeCategoryId;
+        const projEl = document.createElement('div');
+        projEl.className = `proj-item ${isProjActive ? 'active' : ''}`;
+        projEl.innerHTML = `
+          <div class="proj-left">
+            <span class="icon-clickable" title="Changer l'icône">${proj.icon || '📁'}</span>
+            <span class="proj-name" title="Double-cliquez pour renommer">${proj.name}</span>
+          </div>
+          <span class="badge-count">${projTotal}</span>
+        `;
+
+        projEl.querySelector('.icon-clickable').onclick = (e) => openChangeIconModal(e, 'project', proj.id);
+        projEl.querySelector('.proj-name').ondblclick = (e) => {
+          e.stopPropagation();
+          const newName = prompt("Nouveau nom du projet :", proj.name);
+          if (newName && newName.trim()) {
+            proj.name = newName.trim();
+            saveState();
+          }
+        };
+        projEl.onclick = () => {
+          state.activeProjectId = proj.id;
+          state.activeCategoryId = null;
+          render();
+        };
+
+        group.appendChild(projEl);
+
+        if (proj.id === state.activeProjectId && proj.categories.length > 0) {
+          const subNav = document.createElement('div');
+          subNav.className = 'sub-nav';
+
+          proj.categories.forEach(cat => {
+            const catEl = document.createElement('div');
+            catEl.className = `cat-item ${state.activeCategoryId === cat.id ? 'active' : ''}`;
+            catEl.innerHTML = `
+              <div class="proj-left">
+                <span class="icon-clickable" title="Changer l'icône">${cat.icon || '▤'}</span>
+                <span class="proj-name">${cat.name}</span>
+              </div>
+              <span class="badge-count">${cat.tasks.length}</span>
+            `;
+
+            catEl.querySelector('.icon-clickable').onclick = (e) => openChangeIconModal(e, 'category', proj.id, cat.id);
+            catEl.ondblclick = (e) => {
+              e.stopPropagation();
+              const newName = prompt("Nouveau nom de la sous-catégorie :", cat.name);
+              if (newName && newName.trim()) {
+                cat.name = newName.trim();
+                saveState();
+              }
+            };
+            catEl.onclick = (e) => {
+              e.stopPropagation();
+              state.activeProjectId = proj.id;
+              state.activeCategoryId = state.activeCategoryId === cat.id ? null : cat.id;
+              render();
+            };
+            subNav.appendChild(catEl);
+          });
+
+          group.appendChild(subNav);
         }
-        if (!state.collapsedProjects) state.collapsedProjects = {};
-        if (!state.viewMode) state.viewMode = 'list';
-        if (!state.calendarDate) state.calendarDate = getTodayISO();
 
-        state.projects.forEach(p => {
-          if (!p.icon) p.icon = '📁';
-          p.categories.forEach(c => {
-            if (!c.icon) c.icon = '▤';
-            c.tasks.forEach(t => {
-              if (!t.startDate && t.dueDate) t.startDate = t.dueDate;
-              if (!t.duration) t.duration = 1;
-            });
+        nav.appendChild(group);
+      });
+
+      const pct = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
+      document.getElementById('globalProgressPercentage').textContent = `${pct}%`;
+      document.getElementById('globalProgressBar').style.width = `${pct}%`;
+    }
+
+    function renderMainWorkspace() {
+      const proj = getActiveProject();
+      const titleEl = document.getElementById('currentProjectTitle');
+      const catSelect = document.getElementById('quickTaskCategory');
+      const container = document.getElementById('categoriesContainer');
+
+      if (!proj) {
+        titleEl.textContent = "Aucun projet";
+        container.innerHTML = `<p style="color: var(--text-muted);">Cliquez sur "+ Nouveau projet" à gauche pour commencer.</p>`;
+        return;
+      }
+
+      titleEl.textContent = `${proj.icon || '📁'} ${proj.name}`;
+
+      const prevCat = catSelect.value;
+      catSelect.innerHTML = '';
+      proj.categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || '▤'} ${c.name}`;
+        catSelect.appendChild(opt);
+      });
+      if (state.activeCategoryId) catSelect.value = state.activeCategoryId;
+      else if (prevCat && proj.categories.some(c => c.id === prevCat)) catSelect.value = prevCat;
+
+      container.innerHTML = '';
+      let visibleCount = 0;
+
+      const visibleCategories = state.activeCategoryId
+        ? proj.categories.filter(c => c.id === state.activeCategoryId)
+        : proj.categories;
+
+      visibleCategories.forEach(cat => {
+        const filteredTasks = cat.tasks.filter(t => {
+          if (state.filter === 'todo') return !t.done;
+          if (state.filter === 'done') return t.done;
+          return true;
+        });
+
+        visibleCount += filteredTasks.length;
+
+        const card = document.createElement('div');
+        card.className = 'category-card';
+        card.innerHTML = `
+          <div class="category-card-header">
+            <div class="cat-title-wrap">
+              <span>${cat.icon || '▤'}</span>
+              <span>${cat.name}</span>
+              <span class="badge-count">${filteredTasks.length}</span>
+            </div>
+            <button class="btn-del-cat" style="color: var(--text-dim); font-size: 12px;" title="Supprimer la sous-catégorie">✕</button>
+          </div>
+          <div class="task-list"></div>
+        `;
+
+        card.querySelector('.btn-del-cat').onclick = () => {
+          if (confirm(`Supprimer la sous-catégorie "${cat.name}" ?`)) {
+            proj.categories = proj.categories.filter(c => c.id !== cat.id);
+            if (state.activeCategoryId === cat.id) state.activeCategoryId = null;
+            saveState();
+          }
+        };
+
+        const listEl = card.querySelector('.task-list');
+        if (filteredTasks.length === 0) {
+          listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-dim); padding: 6px 0;">Aucune tâche dans cette vue.</div>`;
+        } else {
+          filteredTasks.forEach(task => {
+            const row = document.createElement('div');
+            row.className = `task-row ${task.done ? 'done' : ''} ${state.selectedTaskId === task.id ? 'selected' : ''}`;
+            const prioLabel = task.priority === 'high' ? 'Haute' : task.priority === 'low' ? 'Basse' : 'Moyenne';
+
+            row.innerHTML = `
+              <div class="task-left">
+                <div class="checkbox ${task.done ? 'checked' : ''}">${task.done ? '✓' : ''}</div>
+                <span class="task-title">${task.title}</span>
+              </div>
+              <div class="task-right">
+                ${task.notes ? '<span title="Contient des notes">📝</span>' : ''}
+                ${task.startDate ? `<span class="date-pill">📅 ${formatDateFr(task.startDate)} (${task.duration || 1}j)</span>` : ''}
+                <span class="prio prio-${task.priority || 'medium'}">${prioLabel}</span>
+              </div>
+            `;
+
+            row.querySelector('.checkbox').onclick = (e) => {
+              e.stopPropagation();
+              task.done = !task.done;
+              saveState();
+            };
+
+            row.onclick = () => {
+              state.selectedTaskId = task.id;
+              render();
+            };
+
+            listEl.appendChild(row);
+          });
+        }
+
+        container.appendChild(card);
+      });
+
+      document.getElementById('projectStats').textContent = `${visibleCount} tâche(s) affichée(s)`;
+    }
+
+    // --- AJOUT RAPIDE DE TÂCHE ---
+    document.getElementById('quickTaskForm').onsubmit = (e) => {
+      e.preventDefault();
+      const proj = getActiveProject();
+      if (!proj) return;
+
+      const titleInput = document.getElementById('quickTaskTitle');
+      const title = titleInput.value.trim();
+      if (!title) return;
+
+      if (proj.categories.length === 0) {
+        proj.categories.push({ id: 'cat-' + Date.now(), name: 'GENERAL', icon: '⚙️', tasks: [] });
+      }
+
+      const catId = document.getElementById('quickTaskCategory').value || proj.categories[0].id;
+      const cat = proj.categories.find(c => c.id === catId) || proj.categories[0];
+
+      cat.tasks.push({
+        id: 't-' + Date.now(),
+        title,
+        done: false,
+        priority: document.getElementById('quickTaskPriority').value,
+        startDate: document.getElementById('quickTaskStartDate').value || getTodayISO(),
+        duration: Math.max(1, parseInt(document.getElementById('quickTaskDuration').value) || 1),
+        notes: ''
+      });
+
+      titleInput.value = '';
+      saveState();
+    };
+
+    // --- FILTRES & VUES ---
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.filter = btn.dataset.filter;
+        renderMainWorkspace();
+      };
+    });
+
+    document.getElementById('btnViewList').onclick = () => {
+      state.viewMode = 'list';
+      document.getElementById('btnViewList').classList.add('active');
+      document.getElementById('btnViewCalendar').classList.remove('active');
+      document.getElementById('listViewContainer').style.display = 'block';
+      document.getElementById('calendarViewContainer').classList.remove('active');
+    };
+
+    document.getElementById('btnViewCalendar').onclick = () => {
+      state.viewMode = 'calendar';
+      document.getElementById('btnViewCalendar').classList.add('active');
+      document.getElementById('btnViewList').classList.remove('active');
+      document.getElementById('listViewContainer').style.display = 'none';
+      document.getElementById('calendarViewContainer').classList.add('active');
+      renderCalendar();
+    };
+
+    // --- CALENDRIER MENSUEL ---
+    function renderCalendar() {
+      const proj = getActiveProject();
+      const grid = document.getElementById('calendarGrid');
+      const label = document.getElementById('calMonthLabel');
+      grid.innerHTML = '';
+
+      const refDate = new Date((state.calendarDate || getTodayISO()) + 'T00:00:00');
+      const year = refDate.getFullYear();
+      const month = refDate.getMonth();
+
+      label.textContent = refDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+      const firstDay = new Date(year, month, 1);
+      let startOffset = firstDay.getDay() - 1;
+      if (startOffset < 0) startOffset = 6;
+
+      const startDate = new Date(year, month, 1 - startOffset);
+      const todayStr = getTodayISO();
+
+      const allTasks = [];
+      if (proj) {
+        proj.categories.forEach(cat => {
+          cat.tasks.forEach(t => {
+            if (t.startDate) {
+              allTasks.push({ ...t, endDate: computeEndDate(t.startDate, t.duration) });
+            }
           });
         });
-      } catch (err) {
-        console.error("Erreur de lecture localStorage :", err);
       }
+
+      for (let i = 0; i < 42; i++) {
+        const cellDate = new Date(startDate);
+        cellDate.setDate(startDate.getDate() + i);
+        const y = cellDate.getFullYear();
+        const m = String(cellDate.getMonth() + 1).padStart(2, '0');
+        const d = String(cellDate.getDate()).padStart(2, '0');
+        const iso = `${y}-${m}-${d}`;
+
+        const cell = document.createElement('div');
+        cell.className = `cal-cell ${cellDate.getMonth() !== month ? 'other-month' : ''} ${iso === todayStr ? 'today' : ''}`;
+        cell.innerHTML = `<div class="cal-day-num"><span>${cellDate.getDate()}</span></div>`;
+
+        const dayTasks = allTasks.filter(t => iso >= t.startDate && iso <= t.endDate);
+        dayTasks.forEach(t => {
+          const ev = document.createElement('div');
+          ev.className = `cal-event cal-ev-${t.priority || 'medium'} ${t.done ? 'done' : ''}`;
+          ev.textContent = t.title;
+          ev.onclick = () => {
+            state.selectedTaskId = t.id;
+            renderDrawer();
+          };
+          cell.appendChild(ev);
+        });
+
+        grid.appendChild(cell);
+      }
+    }
+
+    document.getElementById('btnPrevMonth').onclick = () => {
+      const d = new Date(state.calendarDate + 'T00:00:00');
+      d.setMonth(d.getMonth() - 1);
+      state.calendarDate = d.toISOString().split('T')[0];
+      renderCalendar();
+    };
+
+    document.getElementById('btnNextMonth').onclick = () => {
+      const d = new Date(state.calendarDate + 'T00:00:00');
+      d.setMonth(d.getMonth() + 1);
+      state.calendarDate = d.toISOString().split('T')[0];
+      renderCalendar();
+    };
+
+    document.getElementById('btnTodayMonth').onclick = () => {
+      state.calendarDate = getTodayISO();
+      renderCalendar();
+    };
+
+    // --- VOLET LATÉRAL DROIT (DÉTAILS) ---
+    function renderDrawer() {
+      const drawer = document.getElementById('taskDetailDrawer');
+      if (!state.selectedTaskId) {
+        drawer.classList.remove('open');
+        return;
+      }
+
+      const loc = findTaskLocation(state.selectedTaskId);
+      if (!loc) {
+        state.selectedTaskId = null;
+        drawer.classList.remove('open');
+        return;
+      }
+
+      const { proj, cat, task } = loc;
+      drawer.classList.add('open');
+
+      const toggleBtn = document.getElementById('drawerToggleDone');
+      toggleBtn.className = `checkbox ${task.done ? 'checked' : ''}`;
+      toggleBtn.textContent = task.done ? '✓' : '';
+      toggleBtn.onclick = () => {
+        task.done = !task.done;
+        saveState();
+      };
+
+      const titleInput = document.getElementById('drawerTaskTitle');
+      titleInput.value = task.title;
+      titleInput.oninput = () => {
+        task.title = titleInput.value;
+        saveState();
+      };
+
+      const catSelect = document.getElementById('drawerTaskCategory');
+      catSelect.innerHTML = '';
+      proj.categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.icon || '▤'} ${c.name}`;
+        catSelect.appendChild(opt);
+      });
+      catSelect.value = cat.id;
+      catSelect.onchange = () => {
+        const targetCat = proj.categories.find(c => c.id === catSelect.value);
+        if (targetCat && targetCat.id !== cat.id) {
+          cat.tasks = cat.tasks.filter(t => t.id !== task.id);
+          targetCat.tasks.push(task);
+          saveState();
+        }
+      };
+
+      const prioSelect = document.getElementById('drawerTaskPriority');
+      prioSelect.value = task.priority || 'medium';
+      prioSelect.onchange = () => {
+        task.priority = prioSelect.value;
+        saveState();
+      };
+
+      const startInput = document.getElementById('drawerTaskStartDate');
+      startInput.value = task.startDate || '';
+      startInput.onchange = () => {
+        task.startDate = startInput.value;
+        saveState();
+      };
+
+      const durInput = document.getElementById('drawerTaskDuration');
+      durInput.value = task.duration || 1;
+      durInput.oninput = () => {
+        task.duration = Math.max(1, parseInt(durInput.value) || 1);
+        saveState();
+      };
+
+      const endStr = computeEndDate(task.startDate, task.duration);
+      document.getElementById('drawerEndDateValue').textContent = formatDateFr(endStr);
+
+      const notesInput = document.getElementById('drawerTaskNotes');
+      if (document.activeElement !== notesInput) {
+        notesInput.value = task.notes || '';
+      }
+      notesInput.oninput = () => {
+        task.notes = notesInput.value;
+        saveState(false);
+      };
+
+      document.getElementById('drawerDeleteTask').onclick = () => {
+        if (confirm("Supprimer cette tâche ?")) {
+          cat.tasks = cat.tasks.filter(t => t.id !== task.id);
+          state.selectedTaskId = null;
+          saveState();
+        }
+      };
+    }
+
+    document.getElementById('btnCloseDrawer').onclick = () => {
+      state.selectedTaskId = null;
       render();
-    }
-
-    function saveState(reRender = true) {
-      if (reRender) render();
-      
-      const indicator = document.getElementById('drawerSaveIndicator');
-      if (indicator) {
-        indicator.classList.add('visible');
-        clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => indicator.classList.remove('visible'), 1500);
-      }
-
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (err) {
-        alert("Erreur lors de la sauvegarde locale (espace plein ?). Pensez à exporter vos données.");
-      }
-    }
+    };
 
     // --- EXPORT / IMPORT JSON ---
     document.getElementById('btnExportData').onclick = () => {
@@ -642,10 +1215,8 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ProjectTask_Sauvegarde_${getTodayISO()}.json`;
-      document.body.appendChild(a);
+      a.download = `ProjectTask_Backup_${getTodayISO()}.json`;
       a.click();
-      document.body.removeChild(a);
       URL.revokeObjectURL(url);
     };
 
@@ -656,680 +1227,29 @@
     document.getElementById('fileImportInput').onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
           const imported = JSON.parse(event.target.result);
           if (!imported.projects || !Array.isArray(imported.projects)) {
-            throw new Error("Format de fichier invalide.");
+            return alert("Format de fichier JSON invalide.");
           }
-          if (confirm("Remplacer les projets actuels par ceux du fichier importé ?")) {
-            state = { ...getDefaultState(), ...imported };
-            state.selectedTaskId = null;
-            saveState(true);
-          }
-        } catch (err) {
-          alert("Impossible d'importer ce fichier : " + err.message);
-        }
-        e.target.value = '';
-      };
-      reader.readAsText(file);
-    };
-
-    // --- RENDU DE L'INTERFACE ---
-    function render() {
-      renderProjectsSidebar();
-      renderQuickTaskOptions();
-      updateViewVisibility();
-      if (state.viewMode === 'list') {
-        renderCategoriesAndTasks();
-      } else {
-        renderCalendar();
-      }
-      renderRightDrawer();
-      renderGlobalStats();
-    }
-
-    function updateViewVisibility() {
-      const listContainer = document.getElementById('listViewContainer');
-      const calContainer = document.getElementById('calendarViewContainer');
-      const btnList = document.getElementById('btnViewList');
-      const btnCal = document.getElementById('btnViewCalendar');
-
-      if (state.viewMode === 'calendar') {
-        listContainer.style.display = 'none';
-        calContainer.classList.add('active');
-        btnList.classList.remove('active');
-        btnCal.classList.add('active');
-      } else {
-        listContainer.style.display = 'block';
-        calContainer.classList.remove('active');
-        btnList.classList.add('active');
-        btnCal.classList.remove('active');
-      }
-    }
-
-    function renderProjectsSidebar() {
-      const container = document.getElementById('projectsList');
-      container.innerHTML = '';
-      if (!state.projects) return;
-
-      state.projects.forEach(proj => {
-        let total = 0, done = 0;
-        proj.categories.forEach(c => {
-          total += c.tasks.length;
-          done += c.tasks.filter(t => t.done).length;
-        });
-
-        const isProjActive = proj.id === state.activeProjectId && state.activeCategoryId === null;
-        const isCollapsed = state.collapsedProjects[proj.id] || false;
-        const projIcon = proj.icon || '📁';
-
-        const group = document.createElement('div');
-        group.className = 'proj-group';
-
-        const item = document.createElement('div');
-        item.className = `proj-item ${isProjActive ? 'active' : ''}`;
-        item.onclick = () => {
-          state.activeProjectId = proj.id;
+          state = normalizeStateData(imported);
+          state.activeProjectId = state.projects[0]?.id || null;
           state.activeCategoryId = null;
           state.selectedTaskId = null;
           saveState();
-        };
-
-        item.innerHTML = `
-          <div class="proj-left">
-            <button onclick="toggleCollapse(event, '${proj.id}')" style="font-size: 10px; width: 14px;">${isCollapsed ? '▶' : '▼'}</button>
-            <span class="icon-clickable" onclick="openChangeIconModal(event, 'project', '${proj.id}')" title="Changer l'icône">${projIcon}</span>
-            <span class="proj-name" ondblclick="editProjectName(event, '${proj.id}')">${proj.name}</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 4px;">
-            <button onclick="openCategoryModalFor(event, '${proj.id}')" class="btn-add-sub" title="Ajouter sous-catégorie">+</button>
-            <span class="badge-count">${done}/${total}</span>
-          </div>
-        `;
-        group.appendChild(item);
-
-        if (!isCollapsed && proj.categories) {
-          const subNav = document.createElement('div');
-          subNav.className = 'sub-nav';
-
-          proj.categories.forEach(cat => {
-            const catDone = cat.tasks.filter(t => t.done).length;
-            const isCatActive = proj.id === state.activeProjectId && cat.id === state.activeCategoryId;
-            const catIcon = cat.icon || '▤';
-
-            const catEl = document.createElement('div');
-            catEl.className = `cat-item ${isCatActive ? 'active' : ''}`;
-            catEl.onclick = (e) => {
-              e.stopPropagation();
-              state.activeProjectId = proj.id;
-              state.activeCategoryId = cat.id;
-              state.selectedTaskId = null;
-              saveState();
-            };
-
-            catEl.innerHTML = `
-              <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
-                <span class="icon-clickable" onclick="openChangeIconModal(event, 'category', '${proj.id}', '${cat.id}')" title="Changer l'icône">${catIcon}</span>
-                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" ondblclick="editCategoryName(event, '${proj.id}', '${cat.id}')">${cat.name}</span>
-              </div>
-              <span style="font-family: monospace; font-size: 11px;">${catDone}/${cat.tasks.length}</span>
-            `;
-            subNav.appendChild(catEl);
-          });
-          group.appendChild(subNav);
+          alert("Données importées et synchronisées dans le cloud !");
+        } catch (err) {
+          alert("Impossible de lire ce fichier JSON.");
         }
-
-        container.appendChild(group);
-      });
-    }
-
-    function renderQuickTaskOptions() {
-      const select = document.getElementById('quickTaskCategory');
-      select.innerHTML = '';
-      const proj = state.projects.find(p => p.id === state.activeProjectId);
-
-      if (!proj || proj.categories.length === 0) {
-        select.innerHTML = `<option value="">(Aucune)</option>`;
-        return;
-      }
-
-      proj.categories.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = `${c.icon || '▤'} ${c.name}`;
-        if (state.activeCategoryId && c.id === state.activeCategoryId) opt.selected = true;
-        select.appendChild(opt);
-      });
-    }
-
-    function renderCategoriesAndTasks() {
-      const currentProj = state.projects ? state.projects.find(p => p.id === state.activeProjectId) : null;
-      const titleEl = document.getElementById('currentProjectTitle');
-      const descEl = document.getElementById('currentProjectDesc');
-      const container = document.getElementById('categoriesContainer');
-      const statsEl = document.getElementById('projectStats');
-
-      if (!currentProj) {
-        titleEl.textContent = "Aucun projet sélectionné";
-        descEl.textContent = "Créez ou sélectionnez un projet dans le menu à gauche.";
-        container.innerHTML = '';
-        statsEl.textContent = '0 tâche';
-        return;
-      }
-
-      const activeCatObj = state.activeCategoryId ? currentProj.categories.find(c => c.id === state.activeCategoryId) : null;
-      
-      if (activeCatObj) {
-        titleEl.innerHTML = `<span class="icon-clickable" onclick="openChangeIconModal(event, 'project', '${currentProj.id}')">${currentProj.icon || '📁'}</span> ${currentProj.name} / <span class="icon-clickable" onclick="openChangeIconModal(event, 'category', '${currentProj.id}', '${activeCatObj.id}')">${activeCatObj.icon || '▤'}</span> ${activeCatObj.name}`;
-        descEl.textContent = `Sous-catégorie "${activeCatObj.name}"`;
-      } else {
-        titleEl.innerHTML = `<span class="icon-clickable" onclick="openChangeIconModal(event, 'project', '${currentProj.id}')" title="Changer l'icône du projet">${currentProj.icon || '📁'}</span> ${currentProj.name}`;
-        descEl.textContent = `${currentProj.categories.length} sous-catégorie(s)`;
-      }
-
-      container.innerHTML = '';
-      let totalTasksCount = 0;
-
-      const categoriesToDisplay = activeCatObj ? [activeCatObj] : currentProj.categories;
-
-      categoriesToDisplay.forEach(cat => {
-        let filteredTasks = cat.tasks;
-        if (state.filter === 'todo') filteredTasks = filteredTasks.filter(t => !t.done);
-        if (state.filter === 'done') filteredTasks = filteredTasks.filter(t => t.done);
-
-        totalTasksCount += filteredTasks.length;
-
-        const catDiv = document.createElement('div');
-        catDiv.className = 'category-card';
-
-        catDiv.innerHTML = `
-          <div class="category-card-header">
-            <div class="cat-title-wrap">
-              <span class="icon-clickable" onclick="openChangeIconModal(event, 'category', '${currentProj.id}', '${cat.id}')" title="Changer l'icône">${cat.icon || '▤'}</span>
-              <span>${cat.name}</span>
-              <span class="badge-count">${filteredTasks.length}</span>
-            </div>
-            <button onclick="deleteCategory('${cat.id}')" style="color: var(--text-dim);" title="Supprimer">🗑️</button>
-          </div>
-          <div class="task-list"></div>
-        `;
-
-        const listEl = catDiv.querySelector('.task-list');
-
-        if (filteredTasks.length === 0) {
-          listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-dim); font-style: italic; padding: 6px 0;">Aucune tâche dans cette catégorie.</div>`;
-        } else {
-          filteredTasks.forEach(task => {
-            const isSelected = state.selectedTaskId === task.id;
-            const row = document.createElement('div');
-            row.className = `task-row ${isSelected ? 'selected' : ''} ${task.done ? 'done' : ''}`;
-
-            row.onclick = () => {
-              state.selectedTaskId = task.id;
-              renderCategoriesAndTasks();
-              renderRightDrawer();
-            };
-
-            const hasNotes = (task.notes && task.notes.trim().length > 0) ? `<span title="Contient des notes">📝</span>` : '';
-            
-            let scheduleBadge = '';
-            if (task.startDate) {
-              const dur = task.duration || 1;
-              scheduleBadge = `<span class="date-pill">📅 ${formatDateFr(task.startDate)} • <strong>${dur}j</strong></span>`;
-            }
-
-            row.innerHTML = `
-              <div class="task-left">
-                <button onclick="toggleTask(event, '${cat.id}', '${task.id}')" class="checkbox ${task.done ? 'checked' : ''}">
-                  ${task.done ? '✓' : ''}
-                </button>
-                <span class="task-title">${task.title}</span>
-              </div>
-              <div class="task-right">
-                ${hasNotes}
-                ${scheduleBadge}
-                <span class="prio prio-${task.priority}">${task.priority}</span>
-                <span style="color: var(--text-dim);">›</span>
-              </div>
-            `;
-            listEl.appendChild(row);
-          });
-        }
-
-        container.appendChild(catDiv);
-      });
-
-      statsEl.textContent = `${totalTasksCount} tâche(s) affichée(s)`;
-    }
-
-    // --- VUE CALENDRIER ---
-    function renderCalendar() {
-      const currentProj = state.projects ? state.projects.find(p => p.id === state.activeProjectId) : null;
-      const titleEl = document.getElementById('currentProjectTitle');
-      const descEl = document.getElementById('currentProjectDesc');
-      const grid = document.getElementById('calendarGrid');
-      const monthLabel = document.getElementById('calMonthLabel');
-
-      if (!currentProj) {
-        titleEl.textContent = "Calendrier";
-        descEl.textContent = "Sélectionnez un projet dans la barre latérale.";
-        grid.innerHTML = '';
-        return;
-      }
-
-      titleEl.textContent = `Planning : ${currentProj.icon || '📁'} ${currentProj.name}`;
-      descEl.textContent = "Visualisez l'étalement des tâches selon leur date de début et leur durée en jours.";
-
-      const refDate = new Date(state.calendarDate + 'T00:00:00');
-      const year = refDate.getFullYear();
-      const month = refDate.getMonth();
-
-      monthLabel.textContent = refDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-
-      const plannedTasks = [];
-      const cats = state.activeCategoryId 
-        ? currentProj.categories.filter(c => c.id === state.activeCategoryId) 
-        : currentProj.categories;
-
-      cats.forEach(cat => {
-        cat.tasks.forEach(t => {
-          if (t.startDate) {
-            const endStr = computeEndDate(t.startDate, t.duration || 1);
-            plannedTasks.push({ ...t, catName: cat.name, catIcon: cat.icon || '▤', endDate: endStr });
-          }
-        });
-      });
-
-      const firstDayOfMonth = new Date(year, month, 1);
-      let startDay = firstDayOfMonth.getDay();
-      startDay = startDay === 0 ? 6 : startDay - 1;
-
-      const gridStartDate = new Date(year, month, 1 - startDay);
-      const todayStr = getTodayISO();
-
-      grid.innerHTML = '';
-
-      for (let i = 0; i < 42; i++) {
-        const cellDate = new Date(gridStartDate);
-        cellDate.setDate(gridStartDate.getDate() + i);
-        const y = cellDate.getFullYear();
-        const m = String(cellDate.getMonth() + 1).padStart(2, '0');
-        const d = String(cellDate.getDate()).padStart(2, '0');
-        const cellStr = `${y}-${m}-${d}`;
-
-        const isCurrentMonth = cellDate.getMonth() === month;
-        const isToday = cellStr === todayStr;
-
-        const cell = document.createElement('div');
-        cell.className = `cal-cell ${isCurrentMonth ? '' : 'other-month'} ${isToday ? 'today' : ''}`;
-
-        cell.innerHTML = `
-          <div class="cal-day-num">
-            <span>${cellDate.getDate()}</span>
-          </div>
-        `;
-
-        plannedTasks.forEach(task => {
-          if (cellStr >= task.startDate && cellStr <= task.endDate) {
-            const ev = document.createElement('div');
-            ev.className = `cal-event cal-ev-${task.priority} ${task.done ? 'done' : ''}`;
-            const isStart = cellStr === task.startDate;
-            ev.textContent = isStart ? `${task.catIcon} ${task.title} (${task.duration || 1}j)` : `↳ ${task.title}`;
-            ev.title = `[${task.catName}] ${task.title} (${formatDateFr(task.startDate)} → ${formatDateFr(task.endDate)})`;
-
-            ev.onclick = (e) => {
-              e.stopPropagation();
-              state.selectedTaskId = task.id;
-              renderRightDrawer();
-            };
-
-            cell.appendChild(ev);
-          }
-        });
-
-        grid.appendChild(cell);
-      }
-    }
-
-    // --- VOLET LATÉRAL DROIT (DÉTAILS) ---
-    function findSelectedTaskContext() {
-      if (!state.selectedTaskId || !state.activeProjectId) return null;
-      const proj = state.projects.find(p => p.id === state.activeProjectId);
-      if (!proj) return null;
-
-      for (const cat of proj.categories) {
-        const task = cat.tasks.find(t => t.id === state.selectedTaskId);
-        if (task) return { proj, cat, task };
-      }
-      return null;
-    }
-
-    function renderRightDrawer() {
-      const drawer = document.getElementById('taskDetailDrawer');
-      const ctx = findSelectedTaskContext();
-
-      if (!ctx) {
-        drawer.classList.remove('open');
-        return;
-      }
-
-      drawer.classList.add('open');
-      const { proj, cat, task } = ctx;
-
-      const toggleBtn = document.getElementById('drawerToggleDone');
-      toggleBtn.className = `checkbox ${task.done ? 'checked' : ''}`;
-      toggleBtn.textContent = task.done ? '✓' : '';
-
-      const titleInput = document.getElementById('drawerTaskTitle');
-      if (document.activeElement !== titleInput) titleInput.value = task.title;
-
-      const notesInput = document.getElementById('drawerTaskNotes');
-      if (document.activeElement !== notesInput) notesInput.value = task.notes || '';
-
-      document.getElementById('drawerTaskPriority').value = task.priority || 'medium';
-      document.getElementById('drawerTaskStartDate').value = task.startDate || '';
-      document.getElementById('drawerTaskDuration').value = task.duration || 1;
-
-      const endStr = computeEndDate(task.startDate, task.duration || 1);
-      document.getElementById('drawerEndDateValue').textContent = endStr ? formatDateFr(endStr) : 'Non définie';
-
-      const catSelect = document.getElementById('drawerTaskCategory');
-      catSelect.innerHTML = '';
-      proj.categories.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.id;
-        opt.textContent = `${c.icon || '▤'} ${c.name}`;
-        if (c.id === cat.id) opt.selected = true;
-        catSelect.appendChild(opt);
-      });
-    }
-
-    // Événements Volet Droit
-    document.getElementById('btnCloseDrawer').onclick = () => {
-      state.selectedTaskId = null;
-      render();
-    };
-
-    document.getElementById('drawerToggleDone').onclick = () => {
-      const ctx = findSelectedTaskContext();
-      if (ctx) {
-        ctx.task.done = !ctx.task.done;
-        saveState();
-      }
-    };
-
-    document.getElementById('drawerTaskTitle').oninput = (e) => {
-      const ctx = findSelectedTaskContext();
-      if (ctx) {
-        ctx.task.title = e.target.value;
-        saveState(true);
-      }
-    };
-
-    document.getElementById('drawerTaskNotes').oninput = (e) => {
-      const ctx = findSelectedTaskContext();
-      if (ctx) {
-        ctx.task.notes = e.target.value;
-        saveState(false);
-        if (state.viewMode === 'list') renderCategoriesAndTasks();
-      }
-    };
-
-    document.getElementById('drawerTaskPriority').onchange = (e) => {
-      const ctx = findSelectedTaskContext();
-      if (ctx) {
-        ctx.task.priority = e.target.value;
-        saveState();
-      }
-    };
-
-    document.getElementById('drawerTaskStartDate').onchange = (e) => {
-      const ctx = findSelectedTaskContext();
-      if (ctx) {
-        ctx.task.startDate = e.target.value;
-        saveState();
-      }
-    };
-
-    document.getElementById('drawerTaskDuration').oninput = (e) => {
-      const ctx = findSelectedTaskContext();
-      if (ctx) {
-        ctx.task.duration = Math.max(1, parseInt(e.target.value) || 1);
-        saveState();
-      }
-    };
-
-    document.getElementById('drawerTaskCategory').onchange = (e) => {
-      const newCatId = e.target.value;
-      const ctx = findSelectedTaskContext();
-      if (ctx && ctx.cat.id !== newCatId) {
-        ctx.cat.tasks = ctx.cat.tasks.filter(t => t.id !== ctx.task.id);
-        const targetCat = ctx.proj.categories.find(c => c.id === newCatId);
-        if (targetCat) {
-          targetCat.tasks.push(ctx.task);
-          saveState();
-        }
-      }
-    };
-
-    document.getElementById('drawerDeleteTask').onclick = () => {
-      const ctx = findSelectedTaskContext();
-      if (ctx && confirm('Supprimer définitivement cette tâche ?')) {
-        ctx.cat.tasks = ctx.cat.tasks.filter(t => t.id !== ctx.task.id);
-        state.selectedTaskId = null;
-        saveState();
-      }
-    };
-
-    // Navigation Calendrier
-    document.getElementById('btnViewList').onclick = () => { state.viewMode = 'list'; render(); };
-    document.getElementById('btnViewCalendar').onclick = () => { state.viewMode = 'calendar'; render(); };
-
-    document.getElementById('btnPrevMonth').onclick = () => {
-      const d = new Date(state.calendarDate + 'T00:00:00');
-      d.setMonth(d.getMonth() - 1);
-      state.calendarDate = d.toISOString().slice(0, 10);
-      renderCalendar();
-    };
-
-    document.getElementById('btnNextMonth').onclick = () => {
-      const d = new Date(state.calendarDate + 'T00:00:00');
-      d.setMonth(d.getMonth() + 1);
-      state.calendarDate = d.toISOString().slice(0, 10);
-      renderCalendar();
-    };
-
-    document.getElementById('btnTodayMonth').onclick = () => {
-      state.calendarDate = getTodayISO();
-      renderCalendar();
-    };
-
-    function renderGlobalStats() {
-      let total = 0, done = 0;
-      if (state.projects) {
-        state.projects.forEach(p => {
-          p.categories.forEach(c => {
-            total += c.tasks.length;
-            done += c.tasks.filter(t => t.done).length;
-          });
-        });
-      }
-      const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-      document.getElementById('globalProgressBar').style.width = pct + '%';
-      document.getElementById('globalProgressPercentage').textContent = pct + '%';
-    }
-
-    // Ajout Rapide
-    document.getElementById('quickTaskForm').onsubmit = (e) => {
-      e.preventDefault();
-      const titleInput = document.getElementById('quickTaskTitle');
-      const startDateInput = document.getElementById('quickTaskStartDate');
-      const durationInput = document.getElementById('quickTaskDuration');
-
-      const title = titleInput.value.trim();
-      const catId = document.getElementById('quickTaskCategory').value;
-      const priority = document.getElementById('quickTaskPriority').value;
-      const startDate = startDateInput.value || getTodayISO();
-      const duration = Math.max(1, parseInt(durationInput.value) || 1);
-
-      if (!title) return;
-      const proj = state.projects.find(p => p.id === state.activeProjectId);
-      if (!proj) return alert('Sélectionnez d\'abord un projet.');
-      if (!catId) return alert('Créez d\'abord une sous-catégorie.');
-
-      const targetCat = proj.categories.find(c => c.id === catId);
-      if (targetCat) {
-        targetCat.tasks.push({
-          id: 't-' + Date.now(),
-          title,
-          done: false,
-          priority,
-          startDate,
-          duration,
-          notes: ''
-        });
-        titleInput.value = '';
-        startDateInput.value = getTodayISO();
-        durationInput.value = 1;
-        saveState();
-      }
-    };
-
-    // Actions diverses
-    function toggleCollapse(event, projId) {
-      event.stopPropagation();
-      state.collapsedProjects[projId] = !state.collapsedProjects[projId];
-      saveState();
-    }
-
-    function openCategoryModalFor(event, projId) {
-      event.stopPropagation();
-      state.activeProjectId = projId;
-      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '⚙️');
-      document.getElementById('modalCategory').classList.add('open');
-    }
-
-    function editProjectName(event, projId) {
-      event.stopPropagation();
-      const proj = state.projects.find(p => p.id === projId);
-      if (!proj) return;
-      const newName = prompt("Nouveau nom du projet :", proj.name);
-      if (newName && newName.trim()) {
-        proj.name = newName.trim();
-        saveState();
-      }
-    }
-
-    function editCategoryName(event, projId, catId) {
-      event.stopPropagation();
-      const proj = state.projects.find(p => p.id === projId);
-      if (!proj) return;
-      const cat = proj.categories.find(c => c.id === catId);
-      if (!cat) return;
-      const newName = prompt("Nouveau nom de la sous-catégorie :", cat.name);
-      if (newName && newName.trim()) {
-        cat.name = newName.trim();
-        saveState();
-      }
-    }
-
-    function deleteCategory(catId) {
-      const proj = state.projects.find(p => p.id === state.activeProjectId);
-      if (!proj) return;
-      if (confirm('Supprimer cette sous-catégorie et toutes ses tâches ?')) {
-        proj.categories = proj.categories.filter(c => c.id !== catId);
-        if (state.activeCategoryId === catId) state.activeCategoryId = null;
-        state.selectedTaskId = null;
-        saveState();
-      }
-    }
-
-    function toggleTask(event, catId, taskId) {
-      event.stopPropagation();
-      const proj = state.projects.find(p => p.id === state.activeProjectId);
-      if (!proj) return;
-      const cat = proj.categories.find(c => c.id === catId);
-      if (!cat) return;
-      const task = cat.tasks.find(t => t.id === taskId);
-      if (task) {
-        task.done = !task.done;
-        saveState();
-      }
-    }
-
-    // Modals Création Projet & Sous-catégorie
-    document.getElementById('btnNewProject').onclick = () => {
-      buildIconSelector('projectIconGrid', 'inputProjectCustomIcon', '🏗️');
-      document.getElementById('modalProject').classList.add('open');
-    };
-    document.getElementById('btnCloseProjectModal').onclick = () => document.getElementById('modalProject').classList.remove('open');
-    
-    document.getElementById('btnSaveProject').onclick = () => {
-      const name = document.getElementById('inputProjectName').value.trim();
-      const icon = document.getElementById('inputProjectCustomIcon').value.trim() || '📁';
-      if (name) {
-        const newProj = {
-          id: 'proj-' + Date.now(),
-          name,
-          icon,
-          categories: [{ id: 'cat-' + Date.now(), name: 'GENERAL', icon: '⚙️', tasks: [] }]
-        };
-        if (!state.projects) state.projects = [];
-        state.projects.push(newProj);
-        state.activeProjectId = newProj.id;
-        state.activeCategoryId = null;
-        state.selectedTaskId = null;
-        document.getElementById('inputProjectName').value = '';
-        document.getElementById('modalProject').classList.remove('open');
-        saveState();
-      }
-    };
-
-    document.getElementById('btnNewCategory').onclick = () => {
-      if (!state.activeProjectId) return alert('Sélectionnez d\'abord un projet.');
-      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '⚙️');
-      document.getElementById('modalCategory').classList.add('open');
-    };
-    document.getElementById('btnCloseCategoryModal').onclick = () => document.getElementById('modalCategory').classList.remove('open');
-
-    document.getElementById('btnSaveCategory').onclick = () => {
-      const name = document.getElementById('inputCategoryName').value.trim();
-      const icon = document.getElementById('inputCategoryCustomIcon').value.trim() || '▤';
-      if (name) {
-        const proj = state.projects.find(p => p.id === state.activeProjectId);
-        if (proj) {
-          proj.categories.push({ id: 'cat-' + Date.now(), name, icon, tasks: [] });
-          document.getElementById('inputCategoryName').value = '';
-          document.getElementById('modalCategory').classList.remove('open');
-          saveState();
-        }
-      }
-    };
-
-    document.getElementById('btnDeleteProject').onclick = () => {
-      if (!state.activeProjectId) return;
-      if (confirm('Supprimer ce projet et tout son contenu ?')) {
-        state.projects = state.projects.filter(p => p.id !== state.activeProjectId);
-        state.activeProjectId = state.projects.length > 0 ? state.projects[0].id : null;
-        state.activeCategoryId = null;
-        state.selectedTaskId = null;
-        saveState();
-      }
-    };
-
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.onclick = (e) => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        state.filter = e.target.dataset.filter;
-        renderCategoriesAndTasks();
       };
-    });
+      reader.readAsText(file);
+      e.target.value = '';
+    };
 
-    loadState();
+    // Démarrage de la synchronisation Cloud
+    initCloudSync();
   </script>
 </body>
 </html>
