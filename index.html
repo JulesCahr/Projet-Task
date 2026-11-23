@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ProjectTask - Gestionnaire & Calendrier (Cloud)</title>
+  <title>ProjectTask - Espace Jules & Léa</title>
   <style>
     :root {
       --bg-dark: #020617;
@@ -42,12 +42,76 @@
     .btn-secondary { background: var(--bg-card); border: 1px solid var(--border-light); color: var(--text-main); padding: 7px 12px; border-radius: 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
     .btn-secondary:hover { background: #293548; }
 
+    /* ÉCRAN DE SÉLECTION D'ESPACE (JULES / LÉA) */
+    .workspace-gate {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at top, #1e1b4b 0%, #020617 65%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 24px;
+    }
+    .workspace-gate.hidden { display: none; }
+    .gate-header { text-align: center; margin-bottom: 36px; }
+    .gate-logo { width: 52px; height: 52px; background: var(--primary); border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 26px; margin-bottom: 14px; box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4); }
+    .gate-title { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+    .gate-subtitle { font-size: 14px; color: var(--text-muted); }
+
+    .gate-cards { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; max-width: 680px; width: 100%; }
+    .gate-card {
+      flex: 1;
+      min-width: 240px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .gate-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary);
+      box-shadow: 0 16px 35px rgba(79, 70, 229, 0.22);
+      background: #131c33;
+    }
+    .gate-card.lea:hover {
+      border-color: #ec4899;
+      box-shadow: 0 16px 35px rgba(236, 72, 153, 0.22);
+    }
+    .gate-avatar { font-size: 46px; margin-bottom: 4px; }
+    .gate-card-name { font-size: 20px; font-weight: 700; }
+    .gate-card-desc { font-size: 12.5px; color: var(--text-muted); }
+
     /* BARRE LATÉRALE GAUCHE */
     .sidebar-left { width: 275px; background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; }
     .sidebar-top { padding: 20px; overflow-y: auto; flex: 1; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
-    .brand-logo { width: 36px; height: 36px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; }
-    .brand-title { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+    .brand { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .brand-left { display: flex; align-items: center; gap: 10px; }
+    .brand-logo { width: 34px; height: 34px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; }
+    .brand-title { font-size: 17px; font-weight: 700; letter-spacing: -0.5px; }
+
+    .active-space-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      padding: 8px 12px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn-switch-space { font-size: 11px; color: #818cf8; background: rgba(79, 70, 229, 0.15); padding: 4px 8px; border-radius: 6px; }
+    .btn-switch-space:hover { background: rgba(79, 70, 229, 0.3); color: white; }
+
     .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); font-weight: 600; margin: 20px 0 10px; display: flex; justify-content: space-between; }
 
     /* Arborescence Projets */
@@ -58,9 +122,6 @@
     .proj-left { display: flex; align-items: center; gap: 8px; overflow: hidden; flex: 1; }
     .proj-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
     .badge-count { font-size: 11px; background: var(--bg-card); padding: 2px 7px; border-radius: 12px; color: var(--text-muted); font-family: monospace; }
-    .btn-add-sub { opacity: 0; color: var(--text-muted); padding: 2px 6px; font-weight: bold; }
-    .proj-item:hover .btn-add-sub { opacity: 1; }
-    .btn-add-sub:hover { color: #818cf8; }
 
     .icon-clickable { display: inline-flex; align-items: center; justify-content: center; padding: 2px 4px; border-radius: 6px; transition: 0.15s; flex-shrink: 0; }
     .icon-clickable:hover { background: rgba(255, 255, 255, 0.12); transform: scale(1.12); }
@@ -186,12 +247,42 @@
 </head>
 <body>
 
+  <!-- ÉCRAN DE CHOIX : PROJET JULES / PROJET LÉA -->
+  <div id="workspaceGate" class="workspace-gate">
+    <div class="gate-header">
+      <div class="gate-logo">✓</div>
+      <h1 class="gate-title">Choisissez votre espace</h1>
+      <p class="gate-subtitle">Chaque espace possède ses propres projets, tâches et calendrier synchronisés en ligne.</p>
+    </div>
+
+    <div class="gate-cards">
+      <button type="button" class="gate-card jules" onclick="selectWorkspace('jules')">
+        <div class="gate-avatar">👨‍💻</div>
+        <div class="gate-card-name">Projet Jules</div>
+        <div class="gate-card-desc">Accéder aux projets, tâches et planning de Jules</div>
+      </button>
+
+      <button type="button" class="gate-card lea" onclick="selectWorkspace('lea')">
+        <div class="gate-avatar">👩‍💻</div>
+        <div class="gate-card-name">Projet Léa</div>
+        <div class="gate-card-desc">Accéder aux projets, tâches et planning de Léa</div>
+      </button>
+    </div>
+  </div>
+
   <!-- BARRE LATÉRALE GAUCHE -->
   <aside class="sidebar-left">
     <div class="sidebar-top">
       <div class="brand">
-        <div class="brand-logo">✓</div>
-        <div class="brand-title">ProjectTask</div>
+        <div class="brand-left">
+          <div class="brand-logo">✓</div>
+          <div class="brand-title">ProjectTask</div>
+        </div>
+      </div>
+
+      <div class="active-space-banner">
+        <span id="activeSpaceLabel">👨‍💻 Espace Jules</span>
+        <button id="btnSwitchSpace" class="btn-switch-space" title="Changer d'espace">Changer</button>
       </div>
 
       <button id="btnNewProject" class="btn-primary" style="width: 100%;">+ Nouveau projet</button>
@@ -212,7 +303,7 @@
       <div class="progress-bar-bg">
         <div id="globalProgressBar" class="progress-bar-fill"></div>
       </div>
-      <div id="cloudSyncStatus" class="cloud-status">⏳ Connexion au cloud...</div>
+      <div id="cloudSyncStatus" class="cloud-status">⏳ En attente de choix...</div>
     </div>
   </aside>
 
@@ -235,7 +326,7 @@
 
         <button id="btnNewCategory" class="btn-secondary">📁+ Sous-catégorie</button>
         <button id="btnExportData" class="btn-secondary" title="Télécharger une copie JSON">💾 Exporter</button>
-        <button id="btnImportData" class="btn-secondary" title="Importer un fichier JSON vers le cloud">📂 Importer</button>
+        <button id="btnImportData" class="btn-secondary" title="Importer un fichier JSON vers cet espace">📂 Importer</button>
         <input type="file" id="fileImportInput" accept=".json" style="display: none;">
       </div>
     </header>
@@ -447,7 +538,26 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    const docRef = db.collection("projectTask").doc("donnees_principales");
+
+    // Configuration des deux espaces séparés dans Firebase
+    const WORKSPACES = {
+      jules: {
+        docName: "donnees_jules",
+        label: "👨‍💻 Espace Jules",
+        defaultProjectName: "PROJET JULES",
+        defaultIcon: "🏗️"
+      },
+      lea: {
+        docName: "donnees_lea",
+        label: "👩‍💻 Espace Léa",
+        defaultProjectName: "PROJET LÉA",
+        defaultIcon: "✨"
+      }
+    };
+
+    let currentWorkspaceKey = null;
+    let docRef = null;
+    let unsubscribeSnapshot = null;
 
     const AVAILABLE_ICONS = [
       '📁', '📂', '🏗️', '🌉', '🏭', '🏢', '🚧', '⚙️',
@@ -466,34 +576,35 @@
       return `${y}-${m}-${d}`;
     }
 
-    function getDefaultState() {
+    function getDefaultState(spaceKey = 'jules') {
+      const cfg = WORKSPACES[spaceKey] || WORKSPACES.jules;
       return {
         projects: [
           {
-            id: 'proj-default',
-            name: 'MON PREMIER PROJET',
-            icon: '🏗️',
+            id: 'proj-default-' + spaceKey,
+            name: cfg.defaultProjectName,
+            icon: cfg.defaultIcon,
             categories: [
               {
-                id: 'cat-general',
+                id: 'cat-general-' + spaceKey,
                 name: 'GENERAL',
                 icon: '⚙️',
                 tasks: [
                   {
-                    id: 't-welcome',
-                    title: 'Exemple de tâche synchronisée dans le cloud',
+                    id: 't-welcome-' + spaceKey,
+                    title: 'Bienvenue dans ' + cfg.label,
                     done: false,
                     priority: 'medium',
                     startDate: getTodayISO(),
-                    duration: 2,
-                    notes: 'Toutes vos modifications sont sauvegardées automatiquement en ligne.'
+                    duration: 1,
+                    notes: 'Cet espace est totalement indépendant et synchronisé automatiquement.'
                   }
                 ]
               }
             ]
           }
         ],
-        activeProjectId: 'proj-default',
+        activeProjectId: 'proj-default-' + spaceKey,
         activeCategoryId: null,
         selectedTaskId: null,
         collapsedProjects: {},
@@ -503,7 +614,7 @@
       };
     }
 
-    let state = getDefaultState();
+    let state = getDefaultState('jules');
     let saveTimeout = null;
     let iconEditTarget = null;
 
@@ -518,7 +629,7 @@
     });
 
     function normalizeStateData(raw) {
-      const merged = { ...getDefaultState(), ...raw };
+      const merged = { ...getDefaultState(currentWorkspaceKey || 'jules'), ...raw };
       if (!merged.collapsedProjects) merged.collapsedProjects = {};
       if (!merged.viewMode) merged.viewMode = 'list';
       if (!merged.calendarDate) merged.calendarDate = getTodayISO();
@@ -538,11 +649,47 @@
       return merged;
     }
 
-    // --- SYNCHRONISATION TEMPS RÉEL AVEC FIREBASE ---
-    function initCloudSync() {
-      const statusEl = document.getElementById('cloudSyncStatus');
+    // --- SÉLECTION ET BASCULE ENTRE JULES ET LÉA ---
+    function selectWorkspace(spaceKey) {
+      if (!WORKSPACES[spaceKey]) return;
+      currentWorkspaceKey = spaceKey;
+      const cfg = WORKSPACES[spaceKey];
 
-      docRef.onSnapshot((doc) => {
+      // Met à jour l'interface
+      document.getElementById('workspaceGate').classList.add('hidden');
+      document.getElementById('activeSpaceLabel').textContent = cfg.label;
+      document.title = `ProjectTask - ${cfg.label}`;
+
+      // Réinitialise l'état local pour le nouvel espace
+      state = getDefaultState(spaceKey);
+      render();
+
+      // Démarre la synchronisation Firebase sur le document dédié
+      initCloudSync(cfg.docName);
+    }
+
+    document.getElementById('btnSwitchSpace').onclick = () => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+      state.selectedTaskId = null;
+      document.getElementById('workspaceGate').classList.remove('hidden');
+    };
+
+    // --- SYNCHRONISATION TEMPS RÉEL AVEC FIREBASE ---
+    function initCloudSync(docName) {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+      }
+
+      const statusEl = document.getElementById('cloudSyncStatus');
+      statusEl.textContent = '⏳ Connexion au cloud...';
+      statusEl.style.color = '#fbbf24';
+
+      docRef = db.collection("projectTask").doc(docName);
+
+      unsubscribeSnapshot = docRef.onSnapshot((doc) => {
         if (doc.exists) {
           const activeEl = document.activeElement;
           const isTypingInDrawer = activeEl && (activeEl.id === 'drawerTaskNotes' || activeEl.id === 'drawerTaskTitle');
@@ -574,6 +721,7 @@
 
     async function saveState(reRender = true) {
       if (reRender) render();
+      if (!docRef) return;
 
       const indicator = document.getElementById('drawerSaveIndicator');
       const statusEl = document.getElementById('cloudSyncStatus');
@@ -1215,7 +1363,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `ProjectTask_Backup_${getTodayISO()}.json`;
+      a.download = `ProjectTask_${currentWorkspaceKey || 'backup'}_${getTodayISO()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     };
@@ -1239,7 +1387,7 @@
           state.activeCategoryId = null;
           state.selectedTaskId = null;
           saveState();
-          alert("Données importées et synchronisées dans le cloud !");
+          alert(`Données importées et synchronisées dans ${WORKSPACES[currentWorkspaceKey].label} !`);
         } catch (err) {
           alert("Impossible de lire ce fichier JSON.");
         }
@@ -1247,9 +1395,6 @@
       reader.readAsText(file);
       e.target.value = '';
     };
-
-    // Démarrage de la synchronisation Cloud
-    initCloudSync();
   </script>
 </body>
 </html>
