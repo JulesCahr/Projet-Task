@@ -234,11 +234,11 @@
     /* MODALS & SÉLECTEUR D'ICÔNES */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 50; }
     .modal-overlay.open { display: flex; }
-    .modal-box { background: var(--bg-panel); border: 1px solid var(--border-light); border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; }
+    .modal-box { background: var(--bg-panel); border: 1px solid var(--border-light); border-radius: 16px; padding: 24px; width: 100%; max-width: 440px; }
     .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
-    .icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-top: 8px; max-height: 170px; overflow-y: auto; padding: 6px; background: var(--bg-input); border-radius: 10px; border: 1px solid var(--border); }
+    .icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-top: 8px; max-height: 210px; overflow-y: auto; padding: 6px; background: var(--bg-input); border-radius: 10px; border: 1px solid var(--border); }
     .icon-option { font-size: 18px; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; }
     .icon-option:hover { background: var(--bg-card); }
     .icon-option.selected { background: rgba(79, 70, 229, 0.3); border-color: var(--primary); }
@@ -545,7 +545,7 @@
         docName: "donnees_jules",
         label: "👨‍💻 Espace Jules",
         defaultProjectName: "PROJET JULES",
-        defaultIcon: "🏗️"
+        defaultIcon: "🏭"
       },
       lea: {
         docName: "donnees_lea",
@@ -559,13 +559,28 @@
     let docRef = null;
     let unsubscribeSnapshot = null;
 
+    // Protection contre l'écrasement réseau pendant la frappe
+    let pendingLocalWrites = 0;
+    let textSaveTimer = null;
+
+    // Sélection d'icônes orientées industrie, chantier, mécanique, énergie et automatisme
     const AVAILABLE_ICONS = [
-      '📁', '📂', '🏗️', '🌉', '🏭', '🏢', '🚧', '⚙️',
-      '🔧', '🔩', '🔌', '⚡', '🔋', '📡', '📶', '🖥️',
-      '💻', '🤖', '🎛️', '📟', '🧭', '📐', '📏', '🔬',
-      '🚦', '🛑', '🚨', '🛡️', '🔒', '🔑', '📦', '🚚',
-      '🚛', '🚂', '🚢', '✈️', '🌐', '🗺️', '📍', '📋',
-      '📊', '📈', '📝', '✅', '⭐', '🔥', '💡', '▤'
+      // Usines, Infrastructures & Chantier
+      '🏭', '🏗️', '🌉', '🏢', '🚧', '🗼', '🛢️', '⛽',
+      // Engins & Logistique lourde
+      '🚜', '🚛', '🚚', '🚂', '🚆', '🚢', '⚓', '📦',
+      // Mécanique, Assemblage & Outillage lourd
+      '⚙️', '🔧', '🔩', '🔨', '⚒️', '🛠️', '⛏️', '🪚',
+      '🪜', '🧲', '🔗', '⛓️', '🗜️', '🪝', '🧰', '🧱',
+      // Énergie, Électronique & Automatisme
+      '⚡', '🔌', '🔋', '🪫', '💡', '🔦', '📡', '🛰️',
+      '🎛️', '📟', '🤖', '🖥️', '💻', '📶', '🧭', '🎚️',
+      // Sécurité, EPI & Signalisation
+      '🦺', '🪖', '🧯', '⚠️', '☢️', '☣️', '🚦', '🛑',
+      '🚨', '🛡️', '🔒', '🔑', '🚧', '📢', '🔔', '🧯',
+      // Contrôle, Mesure & Documentation technique
+      '📐', '📏', '🔬', '🧪', '🧬', '📋', '📊', '📈',
+      '📝', '📁', '📂', '✅', '⭐', '🔥', '💧', '▤'
     ];
 
     function getTodayISO() {
@@ -635,10 +650,10 @@
       if (!merged.calendarDate) merged.calendarDate = getTodayISO();
 
       merged.projects.forEach(p => {
-        if (!p.icon) p.icon = '📁';
+        if (!p.icon) p.icon = '🏭';
         if (!p.categories) p.categories = [];
         p.categories.forEach(c => {
-          if (!c.icon) c.icon = '▤';
+          if (!c.icon) c.icon = '⚙️';
           if (!c.tasks) c.tasks = [];
           c.tasks.forEach(t => {
             if (!t.startDate && t.dueDate) t.startDate = t.dueDate;
@@ -649,26 +664,33 @@
       return merged;
     }
 
+    // Force l'envoi immédiat de toute frappe en attente avant de changer de tâche/vue
+    function flushPendingTextSave() {
+      if (textSaveTimer) {
+        clearTimeout(textSaveTimer);
+        textSaveTimer = null;
+        saveState(false);
+      }
+    }
+
     // --- SÉLECTION ET BASCULE ENTRE JULES ET LÉA ---
     function selectWorkspace(spaceKey) {
       if (!WORKSPACES[spaceKey]) return;
       currentWorkspaceKey = spaceKey;
       const cfg = WORKSPACES[spaceKey];
 
-      // Met à jour l'interface
       document.getElementById('workspaceGate').classList.add('hidden');
       document.getElementById('activeSpaceLabel').textContent = cfg.label;
       document.title = `ProjectTask - ${cfg.label}`;
 
-      // Réinitialise l'état local pour le nouvel espace
       state = getDefaultState(spaceKey);
       render();
 
-      // Démarre la synchronisation Firebase sur le document dédié
       initCloudSync(cfg.docName);
     }
 
     document.getElementById('btnSwitchSpace').onclick = () => {
+      flushPendingTextSave();
       if (unsubscribeSnapshot) {
         unsubscribeSnapshot();
         unsubscribeSnapshot = null;
@@ -691,9 +713,14 @@
 
       unsubscribeSnapshot = docRef.onSnapshot((doc) => {
         if (doc.exists) {
+          if (doc.metadata.hasPendingWrites || pendingLocalWrites > 0 || textSaveTimer !== null) {
+            return;
+          }
+
           const activeEl = document.activeElement;
           const isTypingInDrawer = activeEl && (activeEl.id === 'drawerTaskNotes' || activeEl.id === 'drawerTaskTitle');
-          
+          if (isTypingInDrawer) return;
+
           const incoming = normalizeStateData(doc.data());
           incoming.activeProjectId = state.activeProjectId && incoming.projects.some(p => p.id === state.activeProjectId)
             ? state.activeProjectId
@@ -705,7 +732,7 @@
           incoming.calendarDate = state.calendarDate;
 
           state = incoming;
-          if (!isTypingInDrawer) render();
+          render();
         } else {
           saveState(false);
         }
@@ -730,6 +757,7 @@
         statusEl.style.color = '#fbbf24';
       }
 
+      pendingLocalWrites++;
       try {
         const cleanState = JSON.parse(JSON.stringify(state));
         await docRef.set(cleanState);
@@ -749,6 +777,8 @@
           statusEl.textContent = '🔴 Échec sauvegarde cloud';
           statusEl.style.color = '#f87171';
         }
+      } finally {
+        pendingLocalWrites = Math.max(0, pendingLocalWrites - 1);
       }
     }
 
@@ -816,15 +846,15 @@
       const proj = state.projects.find(p => p.id === projId);
       if (!proj) return;
 
-      let currentIcon = '📁';
+      let currentIcon = '🏭';
       let label = proj.name;
 
       if (type === 'project') {
-        currentIcon = proj.icon || '📁';
+        currentIcon = proj.icon || '🏭';
       } else {
         const cat = proj.categories.find(c => c.id === catId);
         if (!cat) return;
-        currentIcon = cat.icon || '▤';
+        currentIcon = cat.icon || '⚙️';
         label = cat.name;
       }
 
@@ -841,7 +871,7 @@
 
     document.getElementById('btnSaveChangedIcon').onclick = () => {
       if (!iconEditTarget) return;
-      const newIcon = document.getElementById('inputChangeCustomIcon').value.trim() || '📁';
+      const newIcon = document.getElementById('inputChangeCustomIcon').value.trim() || '🏭';
       const proj = state.projects.find(p => p.id === iconEditTarget.projId);
       if (proj) {
         if (iconEditTarget.type === 'project') {
@@ -859,7 +889,7 @@
     // --- MODALS PROJET & SOUS-CATÉGORIE ---
     document.getElementById('btnNewProject').onclick = () => {
       document.getElementById('inputProjectName').value = '';
-      buildIconSelector('projectIconGrid', 'inputProjectCustomIcon', '🏗️');
+      buildIconSelector('projectIconGrid', 'inputProjectCustomIcon', '🏭');
       document.getElementById('modalProject').classList.add('open');
       document.getElementById('inputProjectName').focus();
     };
@@ -871,7 +901,7 @@
     document.getElementById('btnSaveProject').onclick = () => {
       const name = document.getElementById('inputProjectName').value.trim();
       if (!name) return;
-      const icon = document.getElementById('inputProjectCustomIcon').value.trim() || '📁';
+      const icon = document.getElementById('inputProjectCustomIcon').value.trim() || '🏭';
       const newProj = {
         id: 'proj-' + Date.now(),
         name,
@@ -888,7 +918,7 @@
     document.getElementById('btnNewCategory').onclick = () => {
       if (!getActiveProject()) return alert("Créez d'abord un projet.");
       document.getElementById('inputCategoryName').value = '';
-      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '▤');
+      buildIconSelector('categoryIconGrid', 'inputCategoryCustomIcon', '⚙️');
       document.getElementById('modalCategory').classList.add('open');
       document.getElementById('inputCategoryName').focus();
     };
@@ -902,7 +932,7 @@
       if (!proj) return;
       const name = document.getElementById('inputCategoryName').value.trim();
       if (!name) return;
-      const icon = document.getElementById('inputCategoryCustomIcon').value.trim() || '▤';
+      const icon = document.getElementById('inputCategoryCustomIcon').value.trim() || '⚙️';
       proj.categories.push({ id: 'cat-' + Date.now(), name, icon, tasks: [] });
       document.getElementById('modalCategory').classList.remove('open');
       saveState();
@@ -950,7 +980,7 @@
         projEl.className = `proj-item ${isProjActive ? 'active' : ''}`;
         projEl.innerHTML = `
           <div class="proj-left">
-            <span class="icon-clickable" title="Changer l'icône">${proj.icon || '📁'}</span>
+            <span class="icon-clickable" title="Changer l'icône">${proj.icon || '🏭'}</span>
             <span class="proj-name" title="Double-cliquez pour renommer">${proj.name}</span>
           </div>
           <span class="badge-count">${projTotal}</span>
@@ -966,6 +996,7 @@
           }
         };
         projEl.onclick = () => {
+          flushPendingTextSave();
           state.activeProjectId = proj.id;
           state.activeCategoryId = null;
           render();
@@ -982,7 +1013,7 @@
             catEl.className = `cat-item ${state.activeCategoryId === cat.id ? 'active' : ''}`;
             catEl.innerHTML = `
               <div class="proj-left">
-                <span class="icon-clickable" title="Changer l'icône">${cat.icon || '▤'}</span>
+                <span class="icon-clickable" title="Changer l'icône">${cat.icon || '⚙️'}</span>
                 <span class="proj-name">${cat.name}</span>
               </div>
               <span class="badge-count">${cat.tasks.length}</span>
@@ -999,6 +1030,7 @@
             };
             catEl.onclick = (e) => {
               e.stopPropagation();
+              flushPendingTextSave();
               state.activeProjectId = proj.id;
               state.activeCategoryId = state.activeCategoryId === cat.id ? null : cat.id;
               render();
@@ -1029,14 +1061,14 @@
         return;
       }
 
-      titleEl.textContent = `${proj.icon || '📁'} ${proj.name}`;
+      titleEl.textContent = `${proj.icon || '🏭'} ${proj.name}`;
 
       const prevCat = catSelect.value;
       catSelect.innerHTML = '';
       proj.categories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        opt.textContent = `${c.icon || '▤'} ${c.name}`;
+        opt.textContent = `${c.icon || '⚙️'} ${c.name}`;
         catSelect.appendChild(opt);
       });
       if (state.activeCategoryId) catSelect.value = state.activeCategoryId;
@@ -1063,7 +1095,7 @@
         card.innerHTML = `
           <div class="category-card-header">
             <div class="cat-title-wrap">
-              <span>${cat.icon || '▤'}</span>
+              <span>${cat.icon || '⚙️'}</span>
               <span>${cat.name}</span>
               <span class="badge-count">${filteredTasks.length}</span>
             </div>
@@ -1095,7 +1127,7 @@
                 <span class="task-title">${task.title}</span>
               </div>
               <div class="task-right">
-                ${task.notes ? '<span title="Contient des notes">📝</span>' : ''}
+                ${task.notes && task.notes.trim() ? '<span title="Contient des notes">📝</span>' : ''}
                 ${task.startDate ? `<span class="date-pill">📅 ${formatDateFr(task.startDate)} (${task.duration || 1}j)</span>` : ''}
                 <span class="prio prio-${task.priority || 'medium'}">${prioLabel}</span>
               </div>
@@ -1108,6 +1140,7 @@
             };
 
             row.onclick = () => {
+              flushPendingTextSave();
               state.selectedTaskId = task.id;
               render();
             };
@@ -1229,6 +1262,7 @@
           ev.className = `cal-event cal-ev-${t.priority || 'medium'} ${t.done ? 'done' : ''}`;
           ev.textContent = t.title;
           ev.onclick = () => {
+            flushPendingTextSave();
             state.selectedTaskId = t.id;
             renderDrawer();
           };
@@ -1285,10 +1319,23 @@
       };
 
       const titleInput = document.getElementById('drawerTaskTitle');
-      titleInput.value = task.title;
+      if (document.activeElement !== titleInput) {
+        titleInput.value = task.title;
+      }
       titleInput.oninput = () => {
         task.title = titleInput.value;
-        saveState();
+        clearTimeout(textSaveTimer);
+        textSaveTimer = setTimeout(() => {
+          textSaveTimer = null;
+          saveState(true);
+        }, 400);
+      };
+      titleInput.onblur = () => {
+        if (textSaveTimer) {
+          clearTimeout(textSaveTimer);
+          textSaveTimer = null;
+          saveState(true);
+        }
       };
 
       const catSelect = document.getElementById('drawerTaskCategory');
@@ -1296,7 +1343,7 @@
       proj.categories.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        opt.textContent = `${c.icon || '▤'} ${c.name}`;
+        opt.textContent = `${c.icon || '⚙️'} ${c.name}`;
         catSelect.appendChild(opt);
       });
       catSelect.value = cat.id;
@@ -1339,11 +1386,24 @@
       }
       notesInput.oninput = () => {
         task.notes = notesInput.value;
-        saveState(false);
+        clearTimeout(textSaveTimer);
+        textSaveTimer = setTimeout(() => {
+          textSaveTimer = null;
+          saveState(true);
+        }, 400);
+      };
+      notesInput.onblur = () => {
+        if (textSaveTimer) {
+          clearTimeout(textSaveTimer);
+          textSaveTimer = null;
+          saveState(true);
+        }
       };
 
       document.getElementById('drawerDeleteTask').onclick = () => {
         if (confirm("Supprimer cette tâche ?")) {
+          clearTimeout(textSaveTimer);
+          textSaveTimer = null;
           cat.tasks = cat.tasks.filter(t => t.id !== task.id);
           state.selectedTaskId = null;
           saveState();
@@ -1352,12 +1412,14 @@
     }
 
     document.getElementById('btnCloseDrawer').onclick = () => {
+      flushPendingTextSave();
       state.selectedTaskId = null;
       render();
     };
 
     // --- EXPORT / IMPORT JSON ---
     document.getElementById('btnExportData').onclick = () => {
+      flushPendingTextSave();
       const dataStr = JSON.stringify(state, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
